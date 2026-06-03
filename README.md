@@ -12,6 +12,7 @@ Este projeto consiste em uma simulação concorrente de tráfego urbano desenvol
 | Espedito Ramom Mascena Ricarto | @RamomRicarto |
 | Manoel Junio Duarte da Silva | @Junio404 |
 | Pedro Yan Alcantara Palácio | @pedropalacioo |
+| Sabrina Alencar Soares | @sabrinaalencar|
 | Samuel Wagner Tiburi Silveira | @samsilveira |
 | Sebastião Sousa Soares | @SebastiaoSoares |
 
