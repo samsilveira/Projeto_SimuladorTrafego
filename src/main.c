@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "config.h"
+#include "globals.h"
 
 int main(int argc, char *argv[]) {
     Config cfg = {0};
@@ -28,6 +29,10 @@ int main(int argc, char *argv[]) {
     printf("Veiculos: %d | Tick: %dms | Mapa: %s\n",
            cfg.num_veiculos, cfg.tick_ms,
            cfg.mapa_path ? cfg.mapa_path : "(nenhum)");
+
+    inicializar_mapa();
+    printf("\nMapa Gerado:\n");
+    imprimir_mapa();
 
     return EXIT_SUCCESS;
 }
