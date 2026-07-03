@@ -33,4 +33,46 @@ Este projeto consiste em uma simulação concorrente de tráfego urbano desenvol
 
 ## Compilação e Execução
 
-Em andamento
+Para compilar e testar o simulador rapidamente, você pode usar as opções configuradas no `Makefile`.
+
+### Comandos Rápidos
+
+- **Compilar e executar com valores padrão (recomendado para testes):**
+
+  ```bash
+  make run
+  ```
+
+  *(Isso compilará o projeto e iniciará a simulação com 10 veículos e 100ms de tick).*
+
+- **Apenas compilar:**
+
+  ```bash
+  make
+  ```
+
+- **Limpar arquivos gerados (.o e executável):**
+
+  ```bash
+  make clean
+  ```
+
+### Executando Manualmente
+
+Após executar `make`, o executável `simulador` será gerado dentro da pasta `bin/`. O programa exige parâmetros obrigatórios para rodar:
+
+- `-v`: Quantidade de carros (obrigatório)
+- `-t`: Tempo de delay/tick em ms (obrigatório)
+- `-m`: Caminho para o arquivo de mapa (opcional)
+
+**Exemplo de uso:**
+
+```bash
+./bin/simulador -v 15 -t 100
+```
+
+Para exibir a mensagem de ajuda, execute:
+
+```bash
+./bin/simulador --help
+```
