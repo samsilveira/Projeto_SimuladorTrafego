@@ -17,6 +17,15 @@ int simulacao_rodando = 1;
 
 static int proximo_id_veiculo = 1;
 
+static pthread_mutex_t mutex_rand = PTHREAD_MUTEX_INITIALIZER;
+static int rand_safe(void) {
+    int r;
+    pthread_mutex_lock(&mutex_rand);
+    r = rand();
+    pthread_mutex_unlock(&mutex_rand);
+    return r;
+}
+
 typedef struct Ponto {
     int linha;
     int coluna;
@@ -64,13 +73,13 @@ void inicializar_sistema_veiculos(void) {
 }
 
 int tentar_spawn_veiculo(void) {
-    int idx_inicial = rand() % NUM_PONTOS_SPAWN;
-    
+    int idx_inicial = rand_safe() % NUM_PONTOS_SPAWN;
+
     for (int i = 0; i < NUM_PONTOS_SPAWN; i++) {
         int idx = (idx_inicial + i) % NUM_PONTOS_SPAWN;
         int sx = pontos_spawn[idx].linha;
         int sy = pontos_spawn[idx].coluna;
-        
+
         if (pthread_mutex_trylock(&mapa_simulacao.grade[sx][sy].mutex) == 0) {
             if (mapa_simulacao.grade[sx][sy].ocupada == 0) {
                 Veiculo* v = (Veiculo*)malloc(sizeof(Veiculo));
@@ -78,31 +87,31 @@ int tentar_spawn_veiculo(void) {
                     pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
                     return -1;
                 }
-                
+
                 static pthread_mutex_t mutex_id = PTHREAD_MUTEX_INITIALIZER;
                 pthread_mutex_lock(&mutex_id);
                 v->id = proximo_id_veiculo++;
                 pthread_mutex_unlock(&mutex_id);
-                
+
                 v->x = sx;
                 v->y = sy;
                 v->direcao_atual = pontos_spawn[idx].direcao_inicial;
-                
+
                 // Distribuição de velocidades
-                int r_vel = rand() % 3;
+                int r_vel = rand_safe() % 3;
                 if (r_vel == 0) v->velocidade = RAPIDO;
                 else if (r_vel == 1) v->velocidade = MEDIO;
                 else v->velocidade = LENTO;
-                
+
                 v->tipo = CARRO;
                 v->ticks_acumulados = 0;
-                v->passos_restantes = 25 + rand() % 35; // Entre 25 e 60 passos de vida
-                
+                v->passos_restantes = 25 + rand_safe() % 35; // Entre 25 e 60 passos de vida
+
                 mapa_simulacao.grade[sx][sy].ocupada = 1;
                 mapa_simulacao.grade[sx][sy].veiculo_id = v->id;
-                
+
                 pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
-                
+
                 pthread_t t;
                 if (pthread_create(&t, NULL, thread_veiculo, (void*)v) != 0) {
                     pthread_mutex_lock(&mapa_simulacao.grade[sx][sy].mutex);
@@ -112,7 +121,7 @@ int tentar_spawn_veiculo(void) {
                     free(v);
                     return -1;
                 }
-                
+
                 return 0; // Sucesso
             }
             pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
@@ -150,12 +159,12 @@ void* thread_veiculo(void* arg) {
             mapa_simulacao.grade[self->x][self->y].ocupada = 0;
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
             pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
-            
+
             pthread_mutex_lock(&mutex_veiculos);
             veiculos_ativos--;
             pthread_cond_signal(&cond_spawn);
             pthread_mutex_unlock(&mutex_veiculos);
-            
+
             free(self);
             pthread_exit(NULL);
         }
@@ -171,12 +180,12 @@ void* thread_veiculo(void* arg) {
             mapa_simulacao.grade[self->x][self->y].ocupada = 0;
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
             pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
-            
+
             pthread_mutex_lock(&mutex_veiculos);
             veiculos_ativos--;
             pthread_cond_signal(&cond_spawn);
             pthread_mutex_unlock(&mutex_veiculos);
-            
+
             free(self);
             pthread_exit(NULL);
         }
@@ -191,7 +200,7 @@ void* thread_veiculo(void* arg) {
         Direcao vetor_opcoes[4];
         int num_opcoes = 0;
         Direcao direcoes_padrao[] = {CIMA, BAIXO, ESQUERDA, DIREITA};
-        
+
         for (int i = 0; i < 4; i++) {
             Direcao d = direcoes_padrao[i];
             if ((opcoes_direcao & d) && d != dir_oposta) {
@@ -209,7 +218,7 @@ void* thread_veiculo(void* arg) {
         }
 
         // Sorteia direção no cruzamento/via
-        Direcao dir_escolhida = vetor_opcoes[rand() % num_opcoes];
+        Direcao dir_escolhida = vetor_opcoes[rand_safe() % num_opcoes];
 
         int dest_x = self->x;
         int dest_y = self->y;
@@ -227,7 +236,7 @@ void* thread_veiculo(void* arg) {
                         mapa_simulacao.grade[self->x][self->y].ocupada = 0;
                         mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
                         pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
-                        
+
                         mapa_simulacao.grade[dest_x][dest_y].ocupada = 1;
                         mapa_simulacao.grade[dest_x][dest_y].veiculo_id = self->id;
                         movido = 1;
@@ -235,7 +244,7 @@ void* thread_veiculo(void* arg) {
                 }
                 pthread_mutex_unlock(&mapa_simulacao.grade[dest_x][dest_y].mutex);
             }
-            
+
             if (movido) {
                 self->x = dest_x;
                 self->y = dest_y;

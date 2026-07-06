@@ -150,14 +150,20 @@ void inicializar_mapa(void) {
 void imprimir_mapa(void) {
     for (int i = 0; i < LINHAS; i++) {
         for (int j = 0; j < COLUNAS; j++) {
-            // Se a célula está ocupada, imprime o ID do veículo correspondente
-            if (mapa_simulacao.grade[i][j].ocupada) {
-                printf("%d ", mapa_simulacao.grade[i][j].veiculo_id % 10);
+            pthread_mutex_lock(&mapa_simulacao.grade[i][j].mutex);
+            int ocupada = mapa_simulacao.grade[i][j].ocupada;
+            int veiculo_id = mapa_simulacao.grade[i][j].veiculo_id;
+            TipoCelula tipo = mapa_simulacao.grade[i][j].tipo;
+            Direcao direcao = mapa_simulacao.grade[i][j].direcao;
+            pthread_mutex_unlock(&mapa_simulacao.grade[i][j].mutex);
+
+            if (ocupada) {
+                printf("%d ", veiculo_id % 10);
             } else {
                 char c;
-                switch (mapa_simulacao.grade[i][j].tipo) {
+                switch (tipo) {
                     case CALCADA: c = '.'; break;
-                    case RUA: c = simbolo_rua(mapa_simulacao.grade[i][j].direcao); break;
+                    case RUA: c = simbolo_rua(direcao); break;
                     case CRUZAMENTO: c = 'X'; break;
                     default: c = '?'; break;
                 }

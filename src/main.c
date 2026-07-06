@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
+#include <time.h>
 #include "config.h"
 #include "globals.h"
 #include "veiculo.h"
@@ -24,14 +25,21 @@ void* thread_relogio(void* arg) {
     int tick_ms = *(int*)arg;
     while (simulacao_rodando) {
         usleep(tick_ms * 1000);
-        
+
         // Imprime o estado resultante no terminal (limpando a tela com ANSI escape code)
         printf("\033[H\033[J");
         printf("=== SIMULADOR DE TRAFEGO URBANO ===\n");
+
+        pthread_mutex_lock(&mutex_tick);
+        int tick = tick_global;
+        pthread_mutex_unlock(&mutex_tick);
+
         pthread_mutex_lock(&mutex_veiculos);
-        printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick_global, veiculos_ativos, num_veiculos_meta);
+        int ativos = veiculos_ativos;
         pthread_mutex_unlock(&mutex_veiculos);
-        
+
+        printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick, ativos, num_veiculos_meta);
+
         imprimir_mapa();
         fflush(stdout);
 
@@ -47,8 +55,11 @@ void* thread_relogio(void* arg) {
 // Thread gerenciadora de spawn.
 // Responsável por manter a quantidade de carros ativa na simulação, acordando quando um carro sai.
 void* thread_gerenciadora_spawn(void* arg) {
-    pthread_mutex_lock(&mutex_veiculos);
+    (void)arg;
+
     while (simulacao_rodando) {
+        pthread_mutex_lock(&mutex_veiculos);
+
         while (veiculos_ativos < num_veiculos_meta) {
             if (tentar_spawn_veiculo() == 0) {
                 veiculos_ativos++;
@@ -57,9 +68,20 @@ void* thread_gerenciadora_spawn(void* arg) {
                 break;
             }
         }
-        pthread_cond_wait(&cond_spawn, &mutex_veiculos);
+
+        int precisa_mais = (veiculos_ativos < num_veiculos_meta);
+
+        if (precisa_mais) {
+            // Tenta novamente periodicamente enquanto estiver abaixo da meta
+            pthread_mutex_unlock(&mutex_veiculos);
+            usleep(50 * 1000);
+        } else {
+            // Só dorme indefinidamente quando já atingiu a meta e precisa aguardar despawns
+            pthread_cond_wait(&cond_spawn, &mutex_veiculos);
+            pthread_mutex_unlock(&mutex_veiculos);
+        }
     }
-    pthread_mutex_unlock(&mutex_veiculos);
+
     return NULL;
 }
 
@@ -96,7 +118,7 @@ int main(int argc, char *argv[]) {
 
     // Inicializa o mapa da simulação
     inicializar_mapa();
-    
+
     // Inicializa o sistema de veículos
     inicializar_sistema_veiculos();
     num_veiculos_meta = cfg.num_veiculos;
