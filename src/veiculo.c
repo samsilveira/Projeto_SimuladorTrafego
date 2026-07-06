@@ -233,7 +233,12 @@ void* thread_veiculo(void* arg) {
 
             pthread_mutex_lock(&cel_destino->mutex);
 
-            if (cel_destino->tipo == CRUZAMENTO) {
+            // condicao para verificar se o veiculo está entrando no cruzamento ou já está
+            int vindo_da_rua = (mapa_simulacao.grade[self->x][self->y].tipo != CRUZAMENTO);
+
+            // se estiver vindo de uma rua para um cruzamento, verifica o semáforo
+            // caso já esteja no cruzamento, não precisa verificar o semáforo
+            if (cel_destino->tipo == CRUZAMENTO && vindo_da_rua) {
 
                 int eh_horizontal = (dir_escolhida == ESQUERDA || dir_escolhida == DIREITA);
 
