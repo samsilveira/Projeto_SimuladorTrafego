@@ -124,6 +124,8 @@ void inicializar_mapa(void) {
             mapa_simulacao.grade[i][j].tipo = CALCADA;
             mapa_simulacao.grade[i][j].direcao = NENHUMA;
             mapa_simulacao.grade[i][j].ocupada = 0;
+            mapa_simulacao.grade[i][j].veiculo_id = 0;
+            pthread_mutex_init(&mapa_simulacao.grade[i][j].mutex, NULL);
         }
     }
 
@@ -148,14 +150,19 @@ void inicializar_mapa(void) {
 void imprimir_mapa(void) {
     for (int i = 0; i < LINHAS; i++) {
         for (int j = 0; j < COLUNAS; j++) {
-            char c;
-            switch (mapa_simulacao.grade[i][j].tipo) {
-                case CALCADA: c = '.'; break;
-                case RUA: c = simbolo_rua(mapa_simulacao.grade[i][j].direcao); break;
-                case CRUZAMENTO: c = 'X'; break;
-                default: c = '?'; break;
+            // Se a célula está ocupada, imprime o ID do veículo correspondente
+            if (mapa_simulacao.grade[i][j].ocupada) {
+                printf("%d ", mapa_simulacao.grade[i][j].veiculo_id % 10);
+            } else {
+                char c;
+                switch (mapa_simulacao.grade[i][j].tipo) {
+                    case CALCADA: c = '.'; break;
+                    case RUA: c = simbolo_rua(mapa_simulacao.grade[i][j].direcao); break;
+                    case CRUZAMENTO: c = 'X'; break;
+                    default: c = '?'; break;
+                }
+                printf("%c ", c);
             }
-            printf("%c ", c);
         }
         printf("\n");
     }
