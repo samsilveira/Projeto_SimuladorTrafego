@@ -45,7 +45,6 @@ static Ponto pontos_spawn[] = {
     {15, 8, CIMA},
     {15, 17, CIMA},
     {2, 2, BAIXO},
-    {2, 9, BAIXO},
     {2, 18, BAIXO}
 };
 #define NUM_PONTOS_SPAWN (sizeof(pontos_spawn) / sizeof(pontos_spawn[0]))
@@ -63,7 +62,7 @@ static int eh_ponto_despawn(int linha, int coluna) {
     if (coluna == 1 && (linha == 3 || linha == 7 || linha == 11 || linha == 15)) return 1;
     if (coluna == 18 && (linha == 2 || linha == 6 || linha == 10 || linha == 14)) return 1;
     if (linha == 2 && (coluna == 1 || coluna == 8 || coluna == 17)) return 1;
-    if (linha == 15 && (coluna == 2 || coluna == 9 || coluna == 18)) return 1;
+    if (linha == 15 && (coluna == 2 || coluna == 18)) return 1;
     return 0;
 }
 
