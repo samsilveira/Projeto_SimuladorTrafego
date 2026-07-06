@@ -229,20 +229,41 @@ void* thread_veiculo(void* arg) {
         if (dentro_mapa(dest_x, dest_y) && eh_via(mapa_simulacao.grade[dest_x][dest_y].tipo)) {
             // Movimentação com segurança contra deadlocks
             int movido = 0;
-            if (pthread_mutex_trylock(&mapa_simulacao.grade[dest_x][dest_y].mutex) == 0) {
-                if (mapa_simulacao.grade[dest_x][dest_y].ocupada == 0) {
-                    if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
-                        mapa_simulacao.grade[self->x][self->y].ocupada = 0;
-                        mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
-                        pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
+            Celula* cel_destino = &mapa_simulacao.grade[dest_x][dest_y];
 
-                        mapa_simulacao.grade[dest_x][dest_y].ocupada = 1;
-                        mapa_simulacao.grade[dest_x][dest_y].veiculo_id = self->id;
-                        movido = 1;
+            pthread_mutex_lock(&cel_destino->mutex);
+
+            if (cel_destino->tipo == CRUZAMENTO) {
+
+                int eh_horizontal = (dir_escolhida == ESQUERDA || dir_escolhida == DIREITA);
+
+                while (simulacao_rodando) {
+                    Cores sinal = eh_horizontal ? cel_destino->sinal_horizontal : cel_destino->sinal_vertical;
+                    
+                    if (sinal == VERMELHO) {
+                        pthread_cond_wait(&cel_destino->cond_semaforo, &cel_destino->mutex);
+                    } else {
+                        break; // luz verde
                     }
                 }
-                pthread_mutex_unlock(&mapa_simulacao.grade[dest_x][dest_y].mutex);
             }
+
+            // luz verde. verifica disponibilidade da célula destino
+            if (cel_destino->ocupada == 0) {
+                // usa trylock e evita espera circular
+                if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
+                    mapa_simulacao.grade[self->x][self->y].ocupada = 0;
+                    mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+                    pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
+
+                    cel_destino->ocupada = 1;
+                    cel_destino->veiculo_id = self->id;
+                    movido = 1;
+                }
+            }
+            
+            // destranca célula de destino para evitar deadlocks
+            pthread_mutex_unlock(&cel_destino->mutex);
 
             if (movido) {
                 self->x = dest_x;
