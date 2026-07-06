@@ -136,12 +136,13 @@ void inicializar_mapa(void) {
         adicionar_faixa_horizontal(ruas_h[idx], 1, 18, direcao);
     }
 
-    // Faixas verticais tambem em pares, ligando bordas e miolo do mapa.
-    int ruas_v[] = {1, 2, 8, 9, 17, 18};
-    for (int idx = 0; idx < 6; idx++) {
-        Direcao direcao = (idx % 2 == 0) ? CIMA : BAIXO;
-        adicionar_faixa_vertical(ruas_v[idx], 2, 15, direcao);
-    }
+    // Faixas verticais: colunas 1/2 e 17/18 em pares (via dupla).
+    // Coluna 8 é via de mão única (CIMA). Coluna 9 não é adicionada (torna-se calçada).
+    adicionar_faixa_vertical(1, 2, 15, CIMA);
+    adicionar_faixa_vertical(2, 2, 15, BAIXO);
+    adicionar_faixa_vertical(8, 2, 15, CIMA); // Mão única
+    adicionar_faixa_vertical(17, 2, 15, CIMA);
+    adicionar_faixa_vertical(18, 2, 15, BAIXO);
 
     // Remove qualquer direcao que terminaria fora da matriz ou em calcada.
     remover_direcoes_invalidas();
@@ -158,7 +159,7 @@ void imprimir_mapa(void) {
             pthread_mutex_unlock(&mapa_simulacao.grade[i][j].mutex);
 
             if (ocupada) {
-                printf("%d ", veiculo_id % 10);
+                printf("%2d ", veiculo_id);
             } else {
                 char c;
                 switch (tipo) {
@@ -167,7 +168,7 @@ void imprimir_mapa(void) {
                     case CRUZAMENTO: c = 'X'; break;
                     default: c = '?'; break;
                 }
-                printf("%c ", c);
+                printf(" %c ", c);
             }
         }
         printf("\n");
