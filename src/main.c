@@ -46,6 +46,30 @@ void* thread_relogio(void* arg) {
         // Avança o relógio e acorda as threads de veículos
         pthread_mutex_lock(&mutex_tick);
         tick_global++;
+
+        // alternância dos relógios
+        if (tick_global % 20 == 0) {
+            for (int i = 0; i < LINHAS; i++) {
+                for (int j = 0; j < COLUNAS; j++) {
+                    // só influencia nos semáforos inseridos nos CRUZAMENTOS
+                    if (mapa_simulacao.grade[i][j].tipo == CRUZAMENTO) {
+                        pthread_mutex_lock(&mapa_simulacao.grade[i][j].mutex);
+
+                        if (mapa_simulacao.grade[i][j].sinal_horizontal == VERDE) {
+                            mapa_simulacao.grade[i][j].sinal_horizontal = VERMELHO;
+                            mapa_simulacao.grade[i][j].sinal_vertical = VERDE;
+                        } else {
+                            mapa_simulacao.grade[i][j].sinal_vertical = VERMELHO;
+                            mapa_simulacao.grade[i][j].sinal_horizontal = VERDE;
+                        }
+
+                        pthread_cond_broadcast(&mapa_simulacao.grade[i][j].cond_semaforo);
+                        pthread_mutex_unlock(&mapa_simulacao.grade[i][j].mutex);
+                    }
+                }
+            }
+        }
+
         pthread_cond_broadcast(&cond_tick);
         pthread_mutex_unlock(&mutex_tick);
     }

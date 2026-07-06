@@ -126,6 +126,11 @@ void inicializar_mapa(void) {
             mapa_simulacao.grade[i][j].ocupada = 0;
             mapa_simulacao.grade[i][j].veiculo_id = 0;
             pthread_mutex_init(&mapa_simulacao.grade[i][j].mutex, NULL);
+
+            // inicializa o semáforo (para todas as células)
+            pthread_cond_init(&mapa_simulacao.grade[i][j].cond_semaforo, NULL);
+            mapa_simulacao.grade[i][j].sinal_horizontal = VERDE;
+            mapa_simulacao.grade[i][j].sinal_vertical = VERMELHO;
         }
     }
 
