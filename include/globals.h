@@ -2,6 +2,7 @@
 #define GLOBALS_H
 
 #include <pthread.h>
+#include <unistd.h> // Adicionado para as chamadas de tempo do relógio
 
 #define LINHAS 20
 #define COLUNAS 20
@@ -37,10 +38,10 @@ typedef struct Mapa {
 // Instância global do mapa (a ser definida no .c correspondente)
 extern Mapa mapa_simulacao;
 
-// Variáveis globais para controle de relógio e ticks
-extern pthread_mutex_t mutex_tick;
-extern pthread_cond_t cond_tick;
-extern int tick_global;
+// Variáveis globais para controle de relógio e ticks (Atualizado para sua task)
+extern pthread_mutex_t mutex_relogio;
+extern pthread_cond_t cond_relogio;
+extern int tick_atual;
 
 // Variáveis globais para controle de ciclo de vida dos veículos
 extern int veiculos_ativos;
