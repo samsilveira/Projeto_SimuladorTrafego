@@ -9,7 +9,7 @@ int veiculos_ativos = 0;
 pthread_mutex_t mutex_veiculos = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_spawn = PTHREAD_COND_INITIALIZER;
 
-// int simulacao_rodando = 1; 
+// int simulacao_rodando = 1;
 
 static int proximo_id_veiculo = 1;
 
@@ -133,7 +133,7 @@ void* thread_veiculo(void* arg) {
         // === INÍCIO DA ESPERA SÍNCRONA (Sua Task) ===
         pthread_mutex_lock(&mutex_relogio);
         int tick_esperado = tick_atual; // Salva o tick atual antes de dormir
-        
+
         while (tick_atual == tick_esperado && simulacao_rodando) {
             // Dorme consumindo 0% de CPU até o relógio dar o broadcast
             pthread_cond_wait(&cond_relogio, &mutex_relogio);
@@ -231,7 +231,9 @@ void* thread_veiculo(void* arg) {
             int movido = 0;
             Celula* cel_destino = &mapa_simulacao.grade[dest_x][dest_y];
 
-            pthread_mutex_lock(&cel_destino->mutex);
+            if (pthread_mutex_lock(&cel_destino->mutex) != 0) {
+                continue;
+            }
 
             // condicao para verificar se o veiculo está entrando no cruzamento ou já está
             int vindo_da_rua = (mapa_simulacao.grade[self->x][self->y].tipo != CRUZAMENTO);
@@ -244,7 +246,7 @@ void* thread_veiculo(void* arg) {
 
                 while (simulacao_rodando) {
                     Cores sinal = eh_horizontal ? cel_destino->sinal_horizontal : cel_destino->sinal_vertical;
-                    
+
                     if (sinal == VERMELHO) {
                         pthread_cond_wait(&cel_destino->cond_semaforo, &cel_destino->mutex);
                     } else {
@@ -266,7 +268,7 @@ void* thread_veiculo(void* arg) {
                     movido = 1;
                 }
             }
-            
+
             // destranca célula de destino para evitar deadlocks
             pthread_mutex_unlock(&cel_destino->mutex);
 

@@ -53,9 +53,12 @@ void* thread_relogio(void* arg) {
         // Avança o relógio e acorda as threads de veículos
         pthread_mutex_lock(&mutex_relogio);
         tick_atual++;
+        int alternar = (tick_atual % 20 == 0);
+        pthread_cond_broadcast(&cond_relogio);
+        pthread_mutex_unlock(&mutex_relogio);
 
         // alternância dos relógios
-        if (tick_atual % 20 == 0) {
+        if (alternar) {
             for (int i = 0; i < LINHAS; i++) {
                 for (int j = 0; j < COLUNAS; j++) {
                     // só influencia nos semáforos inseridos nos CRUZAMENTOS
@@ -76,9 +79,6 @@ void* thread_relogio(void* arg) {
                 }
             }
         }
-
-        pthread_cond_broadcast(&cond_relogio);
-        pthread_mutex_unlock(&mutex_relogio);
     }
     return NULL;
 }
