@@ -4,16 +4,12 @@
 #include "veiculo.h"
 #include "globals.h"
 
-// Variáveis globais para controle de relógio e ticks (definidas aqui)
-pthread_mutex_t mutex_tick = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond_tick = PTHREAD_COND_INITIALIZER;
-int tick_global = 0;
-
-// Variáveis globais para controle de ciclo de vida dos veículos (definidas aqui)
+// Variáveis globais para controle de ciclo de vida dos veículos (mantidas da sua equipe)
 int veiculos_ativos = 0;
 pthread_mutex_t mutex_veiculos = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_spawn = PTHREAD_COND_INITIALIZER;
-int simulacao_rodando = 1;
+
+// int simulacao_rodando = 1; 
 
 static int proximo_id_veiculo = 1;
 
@@ -134,12 +130,16 @@ void* thread_veiculo(void* arg) {
     pthread_detach(pthread_self());
 
     while (1) {
-        pthread_mutex_lock(&mutex_tick);
-        int tick_atual = tick_global;
-        while (tick_global == tick_atual && simulacao_rodando) {
-            pthread_cond_wait(&cond_tick, &mutex_tick);
+        // === INÍCIO DA ESPERA SÍNCRONA (Sua Task) ===
+        pthread_mutex_lock(&mutex_relogio);
+        int tick_esperado = tick_atual; // Salva o tick atual antes de dormir
+        
+        while (tick_atual == tick_esperado && simulacao_rodando) {
+            // Dorme consumindo 0% de CPU até o relógio dar o broadcast
+            pthread_cond_wait(&cond_relogio, &mutex_relogio);
         }
-        pthread_mutex_unlock(&mutex_tick);
+        pthread_mutex_unlock(&mutex_relogio);
+        // === FIM DA ESPERA SÍNCRONA ===
 
         if (!simulacao_rodando) {
             break;

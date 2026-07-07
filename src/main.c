@@ -8,6 +8,12 @@
 #include "globals.h"
 #include "veiculo.h"
 
+// === INICIALIZAÇÃO DAS VARIÁVEIS GLOBAIS DO RELÓGIO (Sua Task) ===
+pthread_mutex_t mutex_relogio = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond_relogio = PTHREAD_COND_INITIALIZER;
+int tick_atual = 0;
+int simulacao_rodando = 1;
+
 static int num_veiculos_meta = 0;
 
 void print_help(const char *prog_name) {
@@ -30,10 +36,11 @@ void* thread_relogio(void* arg) {
         printf("\033[H\033[J");
         printf("=== SIMULADOR DE TRAFEGO URBANO ===\n");
 
-        pthread_mutex_lock(&mutex_tick);
-        int tick = tick_global;
-        pthread_mutex_unlock(&mutex_tick);
+        pthread_mutex_lock(&mutex_relogio);
+        int tick = tick_atual;
+        pthread_mutex_unlock(&mutex_relogio);
 
+        // Esta trava pertence ao sistema de spawn (outra task), mantemos como está
         pthread_mutex_lock(&mutex_veiculos);
         int ativos = veiculos_ativos;
         pthread_mutex_unlock(&mutex_veiculos);
@@ -44,11 +51,11 @@ void* thread_relogio(void* arg) {
         fflush(stdout);
 
         // Avança o relógio e acorda as threads de veículos
-        pthread_mutex_lock(&mutex_tick);
-        tick_global++;
+        pthread_mutex_lock(&mutex_relogio);
+        tick_atual++;
 
         // alternância dos relógios
-        if (tick_global % 20 == 0) {
+        if (tick_atual % 20 == 0) {
             for (int i = 0; i < LINHAS; i++) {
                 for (int j = 0; j < COLUNAS; j++) {
                     // só influencia nos semáforos inseridos nos CRUZAMENTOS
@@ -70,8 +77,8 @@ void* thread_relogio(void* arg) {
             }
         }
 
-        pthread_cond_broadcast(&cond_tick);
-        pthread_mutex_unlock(&mutex_tick);
+        pthread_cond_broadcast(&cond_relogio);
+        pthread_mutex_unlock(&mutex_relogio);
     }
     return NULL;
 }
