@@ -29,6 +29,11 @@ typedef struct Celula {
     int ocupada;     // 0 para livre, 1 para ocupada
     int veiculo_id;  // ID do veiculo ocupante, ou 0 se livre
     pthread_mutex_t mutex; // Mutex para exclusão mútua na célula
+
+    // características do semáforo
+    Cores sinal_horizontal; // sinal esquerda ou direita
+    Cores sinal_vertical; // sinal cima ou baixo
+    pthread_cond_t cond_semaforo; // condicao de parada
 } Celula;
 
 typedef struct Mapa {
