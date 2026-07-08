@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -I./include -pthread
 # ncurses será necessária a partir da Issue 8; linkamos apenas pthread por enquanto
-LDFLAGS = -pthread
+LDFLAGS = -pthread -lncurses
 
 SRC_DIR = src
 OBJ_DIR = obj
