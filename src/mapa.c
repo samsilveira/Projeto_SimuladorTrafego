@@ -2,6 +2,7 @@
 #include "globals.h"
 
 Mapa mapa_simulacao;
+pthread_mutex_t mutex_celulas[LINHAS][COLUNAS];
 
 static const Direcao DIRECOES[] = {CIMA, BAIXO, ESQUERDA, DIREITA};
 
@@ -11,6 +12,38 @@ static int dentro_mapa(int linha, int coluna) {
 
 static int eh_via(TipoCelula tipo) {
     return tipo == RUA || tipo == CRUZAMENTO;
+}
+
+void inicializar_mutexes_mapa(void) {
+    for (int i = 0; i < LINHAS; i++) {
+        for (int j = 0; j < COLUNAS; j++) {
+            pthread_mutex_init(&mutex_celulas[i][j], NULL);
+        }
+    }
+}
+
+void destruir_mutexes_mapa(void) {
+    for (int i = 0; i < LINHAS; i++) {
+        for (int j = 0; j < COLUNAS; j++) {
+            pthread_mutex_destroy(&mutex_celulas[i][j]);
+        }
+    }
+}
+
+int travar_celula(int i, int j) {
+    if (!dentro_mapa(i, j)) {
+        return -1;
+    }
+
+    return pthread_mutex_lock(&mutex_celulas[i][j]);
+}
+
+int liberar_celula(int i, int j) {
+    if (!dentro_mapa(i, j)) {
+        return -1;
+    }
+
+    return pthread_mutex_unlock(&mutex_celulas[i][j]);
 }
 
 static int direcao_vertical(Direcao direcao) {
@@ -118,6 +151,8 @@ static char simbolo_rua(Direcao direcao) {
 }
 
 void inicializar_mapa(void) {
+    inicializar_mutexes_mapa();
+
     // Inicializa tudo como CALCADA.
     for (int i = 0; i < LINHAS; i++) {
         for (int j = 0; j < COLUNAS; j++) {
@@ -125,7 +160,6 @@ void inicializar_mapa(void) {
             mapa_simulacao.grade[i][j].direcao = NENHUMA;
             mapa_simulacao.grade[i][j].ocupada = 0;
             mapa_simulacao.grade[i][j].veiculo_id = 0;
-            pthread_mutex_init(&mapa_simulacao.grade[i][j].mutex, NULL);
 
             // inicializa o semáforo (para todas as células)
             pthread_cond_init(&mapa_simulacao.grade[i][j].cond_semaforo, NULL);
@@ -156,12 +190,12 @@ void inicializar_mapa(void) {
 void imprimir_mapa(void) {
     for (int i = 0; i < LINHAS; i++) {
         for (int j = 0; j < COLUNAS; j++) {
-            pthread_mutex_lock(&mapa_simulacao.grade[i][j].mutex);
+            travar_celula(i, j);
             int ocupada = mapa_simulacao.grade[i][j].ocupada;
             int veiculo_id = mapa_simulacao.grade[i][j].veiculo_id;
             TipoCelula tipo = mapa_simulacao.grade[i][j].tipo;
             Direcao direcao = mapa_simulacao.grade[i][j].direcao;
-            pthread_mutex_unlock(&mapa_simulacao.grade[i][j].mutex);
+            liberar_celula(i, j);
 
             if (ocupada) {
                 printf("%2d ", veiculo_id);

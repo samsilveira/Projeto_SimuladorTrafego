@@ -75,11 +75,11 @@ int tentar_spawn_veiculo(void) {
         int sx = pontos_spawn[idx].linha;
         int sy = pontos_spawn[idx].coluna;
 
-        if (pthread_mutex_trylock(&mapa_simulacao.grade[sx][sy].mutex) == 0) {
+        if (pthread_mutex_trylock(&mutex_celulas[sx][sy]) == 0) {
             if (mapa_simulacao.grade[sx][sy].ocupada == 0) {
                 Veiculo* v = (Veiculo*)malloc(sizeof(Veiculo));
                 if (!v) {
-                    pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
+                    liberar_celula(sx, sy);
                     return -1;
                 }
 
@@ -105,21 +105,21 @@ int tentar_spawn_veiculo(void) {
                 mapa_simulacao.grade[sx][sy].ocupada = 1;
                 mapa_simulacao.grade[sx][sy].veiculo_id = v->id;
 
-                pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
+                liberar_celula(sx, sy);
 
                 pthread_t t;
                 if (pthread_create(&t, NULL, thread_veiculo, (void*)v) != 0) {
-                    pthread_mutex_lock(&mapa_simulacao.grade[sx][sy].mutex);
+                    travar_celula(sx, sy);
                     mapa_simulacao.grade[sx][sy].ocupada = 0;
                     mapa_simulacao.grade[sx][sy].veiculo_id = 0;
-                    pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
+                    liberar_celula(sx, sy);
                     free(v);
                     return -1;
                 }
 
                 return 0; // Sucesso
             }
-            pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
+            liberar_celula(sx, sy);
         }
     }
     return -1; // Sem vaga
@@ -154,10 +154,10 @@ void* thread_veiculo(void* arg) {
 
         // Despawn se atingiu a borda e concluiu o limite de passos
         if (self->passos_restantes <= 0 && eh_ponto_despawn(self->x, self->y)) {
-            pthread_mutex_lock(&mapa_simulacao.grade[self->x][self->y].mutex);
+            travar_celula(self->x, self->y);
             mapa_simulacao.grade[self->x][self->y].ocupada = 0;
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
-            pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
+            liberar_celula(self->x, self->y);
 
             pthread_mutex_lock(&mutex_veiculos);
             veiculos_ativos--;
@@ -169,16 +169,16 @@ void* thread_veiculo(void* arg) {
         }
 
         // Roteamento
-        pthread_mutex_lock(&mapa_simulacao.grade[self->x][self->y].mutex);
+        travar_celula(self->x, self->y);
         Direcao opcoes_direcao = mapa_simulacao.grade[self->x][self->y].direcao;
-        pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
+        liberar_celula(self->x, self->y);
 
         if (opcoes_direcao == NENHUMA) {
             // Despawn de emergência se preso fora de via
-            pthread_mutex_lock(&mapa_simulacao.grade[self->x][self->y].mutex);
+            travar_celula(self->x, self->y);
             mapa_simulacao.grade[self->x][self->y].ocupada = 0;
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
-            pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
+            liberar_celula(self->x, self->y);
 
             pthread_mutex_lock(&mutex_veiculos);
             veiculos_ativos--;
@@ -231,7 +231,14 @@ void* thread_veiculo(void* arg) {
             int movido = 0;
             Celula* cel_destino = &mapa_simulacao.grade[dest_x][dest_y];
 
-            if (pthread_mutex_lock(&cel_destino->mutex) != 0) {
+            // Regra da issue: a célula destino é travada antes da célula atual
+            // ser liberada. A origem usa trylock para não criar espera circular.
+            if (travar_celula(dest_x, dest_y) != 0) {
+                continue;
+            }
+
+            if (!eh_via(cel_destino->tipo)) {
+                liberar_celula(dest_x, dest_y);
                 continue;
             }
 
@@ -248,29 +255,34 @@ void* thread_veiculo(void* arg) {
                     Cores sinal = eh_horizontal ? cel_destino->sinal_horizontal : cel_destino->sinal_vertical;
 
                     if (sinal == VERMELHO) {
-                        pthread_cond_wait(&cel_destino->cond_semaforo, &cel_destino->mutex);
+                        pthread_cond_wait(&cel_destino->cond_semaforo, &mutex_celulas[dest_x][dest_y]);
                     } else {
                         break; // luz verde
                     }
                 }
             }
 
+            if (!simulacao_rodando) {
+                liberar_celula(dest_x, dest_y);
+                continue;
+            }
+
             // luz verde. verifica disponibilidade da célula destino
             if (cel_destino->ocupada == 0) {
-                // usa trylock e evita espera circular
-                if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
+                // usa trylock na origem e evita espera circular nos cruzamentos
+                if (pthread_mutex_trylock(&mutex_celulas[self->x][self->y]) == 0) {
                     mapa_simulacao.grade[self->x][self->y].ocupada = 0;
                     mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
-                    pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
 
                     cel_destino->ocupada = 1;
                     cel_destino->veiculo_id = self->id;
+                    liberar_celula(self->x, self->y);
                     movido = 1;
                 }
             }
 
             // destranca célula de destino para evitar deadlocks
-            pthread_mutex_unlock(&cel_destino->mutex);
+            liberar_celula(dest_x, dest_y);
 
             if (movido) {
                 self->x = dest_x;

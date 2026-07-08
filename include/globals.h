@@ -28,7 +28,6 @@ typedef struct Celula {
     Direcao direcao; // Mascara de direcoes permitidas na celula
     int ocupada;     // 0 para livre, 1 para ocupada
     int veiculo_id;  // ID do veiculo ocupante, ou 0 se livre
-    pthread_mutex_t mutex; // Mutex para exclusão mútua na célula
 
     // características do semáforo
     Cores sinal_horizontal; // sinal esquerda ou direita
@@ -42,6 +41,7 @@ typedef struct Mapa {
 
 // Instância global do mapa (a ser definida no .c correspondente)
 extern Mapa mapa_simulacao;
+extern pthread_mutex_t mutex_celulas[LINHAS][COLUNAS];
 
 // Variáveis globais para controle de relógio e ticks (Atualizado para sua task)
 extern pthread_mutex_t mutex_relogio;
@@ -55,6 +55,10 @@ extern pthread_cond_t cond_spawn;
 extern int simulacao_rodando;
 
 void inicializar_mapa(void);
+void inicializar_mutexes_mapa(void);
+void destruir_mutexes_mapa(void);
+int travar_celula(int i, int j);
+int liberar_celula(int i, int j);
 void imprimir_mapa(void);
 
 #endif
