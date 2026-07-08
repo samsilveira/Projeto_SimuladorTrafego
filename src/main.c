@@ -17,6 +17,13 @@ int simulacao_rodando = 1;
 
 static int num_veiculos_meta = 0;
 
+int simulacao_esta_rodando(void) {
+    pthread_mutex_lock(&mutex_relogio);
+    int rodando = simulacao_rodando;
+    pthread_mutex_unlock(&mutex_relogio);
+    return rodando;
+}
+
 static void encerrar_simulacao(void) {
     pthread_mutex_lock(&mutex_relogio);
     simulacao_rodando = 0;
@@ -60,7 +67,7 @@ void print_help(const char *prog_name) {
 // Responsável por incrementar o tick global, notificar os veículos e atualizar a exibição.
 void* thread_relogio(void* arg) {
     int tick_ms = *(int*)arg;
-    while (simulacao_rodando) {
+    while (simulacao_esta_rodando()) {
         usleep(tick_ms * 1000);
 
         // Imprime o estado resultante no terminal (limpando a tela com ANSI escape code)
@@ -120,7 +127,7 @@ void* thread_relogio(void* arg) {
 void* thread_gerenciadora_spawn(void* arg) {
     (void)arg;
 
-    while (simulacao_rodando) {
+    while (simulacao_esta_rodando()) {
         pthread_mutex_lock(&mutex_veiculos);
 
         while (veiculos_ativos < num_veiculos_meta) {

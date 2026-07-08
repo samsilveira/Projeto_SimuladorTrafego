@@ -53,6 +53,48 @@ static int eh_via(TipoCelula tipo) {
     return tipo == RUA || tipo == CRUZAMENTO;
 }
 
+static int sinal_permite_movimento(const Celula *destino, Direcao direcao_movimento) {
+    int movimento_horizontal = direcao_movimento == ESQUERDA ||
+                               direcao_movimento == DIREITA;
+    Cores sinal = movimento_horizontal ? destino->sinal_horizontal :
+                                        destino->sinal_vertical;
+
+    return sinal != VERMELHO;
+}
+
+static int aguardar_sinal_verde(int origem_i, int origem_j,
+                                int destino_i, int destino_j,
+                                Direcao direcao_movimento) {
+    if (travar_celula(destino_i, destino_j) != 0) {
+        return 0;
+    }
+
+    Celula *destino = &mapa_simulacao.grade[destino_i][destino_j];
+    TipoCelula tipo_origem = mapa_simulacao.grade[origem_i][origem_j].tipo;
+
+    if (!eh_via(destino->tipo)) {
+        liberar_celula(destino_i, destino_j);
+        return 0;
+    }
+
+    if (destino->tipo != CRUZAMENTO || tipo_origem == CRUZAMENTO) {
+        liberar_celula(destino_i, destino_j);
+        return 1;
+    }
+
+    while (simulacao_esta_rodando()) {
+        if (sinal_permite_movimento(destino, direcao_movimento)) {
+            liberar_celula(destino_i, destino_j);
+            return 1;
+        }
+
+        pthread_cond_wait(&destino->cond_semaforo, &mutex_celulas[destino_i][destino_j]);
+    }
+
+    liberar_celula(destino_i, destino_j);
+    return 0;
+}
+
 static int eh_ponto_despawn(int linha, int coluna) {
     // Retorna verdadeiro se for um ponto periférico de saída de fluxo
     if (coluna == 1 && (linha == 3 || linha == 7 || linha == 11 || linha == 15)) return 1;
@@ -138,10 +180,11 @@ void* thread_veiculo(void* arg) {
             // Dorme consumindo 0% de CPU até o relógio dar o broadcast
             pthread_cond_wait(&cond_relogio, &mutex_relogio);
         }
+        int rodando = simulacao_rodando;
         pthread_mutex_unlock(&mutex_relogio);
         // === FIM DA ESPERA SÍNCRONA ===
 
-        if (!simulacao_rodando) {
+        if (!rodando) {
             break;
         }
 
@@ -226,65 +269,15 @@ void* thread_veiculo(void* arg) {
         else if (dir_escolhida == ESQUERDA) dest_y--;
         else if (dir_escolhida == DIREITA) dest_y++;
 
-        if (dentro_mapa(dest_x, dest_y) && eh_via(mapa_simulacao.grade[dest_x][dest_y].tipo)) {
-            // Movimentação com segurança contra deadlocks
-            int movido = 0;
-            Celula* cel_destino = &mapa_simulacao.grade[dest_x][dest_y];
-
-            // Regra da issue: a célula destino é travada antes da célula atual
-            // ser liberada. A origem usa trylock para não criar espera circular.
-            if (travar_celula(dest_x, dest_y) != 0) {
+        if (dentro_mapa(dest_x, dest_y)) {
+            if (!aguardar_sinal_verde(self->x, self->y, dest_x, dest_y, dir_escolhida)) {
                 continue;
             }
 
-            if (!eh_via(cel_destino->tipo)) {
-                liberar_celula(dest_x, dest_y);
-                continue;
-            }
+            int movido = mover_veiculo_celula(self->x, self->y, dest_x, dest_y,
+                                              self->id, dir_escolhida);
 
-            // condicao para verificar se o veiculo está entrando no cruzamento ou já está
-            int vindo_da_rua = (mapa_simulacao.grade[self->x][self->y].tipo != CRUZAMENTO);
-
-            // se estiver vindo de uma rua para um cruzamento, verifica o semáforo
-            // caso já esteja no cruzamento, não precisa verificar o semáforo
-            if (cel_destino->tipo == CRUZAMENTO && vindo_da_rua) {
-
-                int eh_horizontal = (dir_escolhida == ESQUERDA || dir_escolhida == DIREITA);
-
-                while (simulacao_rodando) {
-                    Cores sinal = eh_horizontal ? cel_destino->sinal_horizontal : cel_destino->sinal_vertical;
-
-                    if (sinal == VERMELHO) {
-                        pthread_cond_wait(&cel_destino->cond_semaforo, &mutex_celulas[dest_x][dest_y]);
-                    } else {
-                        break; // luz verde
-                    }
-                }
-            }
-
-            if (!simulacao_rodando) {
-                liberar_celula(dest_x, dest_y);
-                continue;
-            }
-
-            // luz verde. verifica disponibilidade da célula destino
-            if (cel_destino->ocupada == 0) {
-                // usa trylock na origem e evita espera circular nos cruzamentos
-                if (pthread_mutex_trylock(&mutex_celulas[self->x][self->y]) == 0) {
-                    mapa_simulacao.grade[self->x][self->y].ocupada = 0;
-                    mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
-
-                    cel_destino->ocupada = 1;
-                    cel_destino->veiculo_id = self->id;
-                    liberar_celula(self->x, self->y);
-                    movido = 1;
-                }
-            }
-
-            // destranca célula de destino para evitar deadlocks
-            liberar_celula(dest_x, dest_y);
-
-            if (movido) {
+            if (movido == 1) {
                 self->x = dest_x;
                 self->y = dest_y;
                 self->direcao_atual = dir_escolhida;

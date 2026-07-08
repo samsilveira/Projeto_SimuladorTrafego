@@ -59,6 +59,9 @@ void inicializar_mutexes_mapa(void);
 void destruir_mutexes_mapa(void);
 int travar_celula(int i, int j);
 int liberar_celula(int i, int j);
+int mover_veiculo_celula(int origem_i, int origem_j, int destino_i, int destino_j,
+                         int veiculo_id, Direcao direcao_movimento);
 void imprimir_mapa(void);
+int simulacao_esta_rodando(void);
 
 #endif

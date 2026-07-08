@@ -14,6 +14,19 @@ static int eh_via(TipoCelula tipo) {
     return tipo == RUA || tipo == CRUZAMENTO;
 }
 
+static int indice_celula(int linha, int coluna) {
+    return linha * COLUNAS + coluna;
+}
+
+static int sinal_permite_movimento(const Celula *destino, Direcao direcao_movimento) {
+    int movimento_horizontal = direcao_movimento == ESQUERDA ||
+                               direcao_movimento == DIREITA;
+    Cores sinal = movimento_horizontal ? destino->sinal_horizontal :
+                                        destino->sinal_vertical;
+
+    return sinal != VERMELHO;
+}
+
 void inicializar_mutexes_mapa(void) {
     for (int i = 0; i < LINHAS; i++) {
         for (int j = 0; j < COLUNAS; j++) {
@@ -44,6 +57,76 @@ int liberar_celula(int i, int j) {
     }
 
     return pthread_mutex_unlock(&mutex_celulas[i][j]);
+}
+
+int mover_veiculo_celula(int origem_i, int origem_j, int destino_i, int destino_j,
+                         int veiculo_id, Direcao direcao_movimento) {
+    if (!dentro_mapa(origem_i, origem_j) || !dentro_mapa(destino_i, destino_j)) {
+        return -1;
+    }
+
+    if (origem_i == destino_i && origem_j == destino_j) {
+        return 0;
+    }
+
+    int origem_indice = indice_celula(origem_i, origem_j);
+    int destino_indice = indice_celula(destino_i, destino_j);
+    int primeira_i = origem_i;
+    int primeira_j = origem_j;
+    int segunda_i = destino_i;
+    int segunda_j = destino_j;
+
+    if (destino_indice < origem_indice) {
+        primeira_i = destino_i;
+        primeira_j = destino_j;
+        segunda_i = origem_i;
+        segunda_j = origem_j;
+    }
+
+    /*
+     * Regra de prevencao de deadlock:
+     * toda transicao entre duas celulas adquire mutexes pela ordem fixa do
+     * indice linear da matriz. Com isso, duas threads nunca formam espera
+     * circular tentando trocar de celula ou entrar no mesmo cruzamento.
+     */
+    if (travar_celula(primeira_i, primeira_j) != 0) {
+        return -1;
+    }
+
+    if (travar_celula(segunda_i, segunda_j) != 0) {
+        liberar_celula(primeira_i, primeira_j);
+        return -1;
+    }
+
+    Celula *origem = &mapa_simulacao.grade[origem_i][origem_j];
+    Celula *destino = &mapa_simulacao.grade[destino_i][destino_j];
+    int movido = 0;
+
+    if (eh_via(origem->tipo) &&
+        eh_via(destino->tipo) &&
+        origem->ocupada &&
+        origem->veiculo_id == veiculo_id &&
+        destino->ocupada == 0 &&
+        (origem->direcao & direcao_movimento) &&
+        (origem->tipo == CRUZAMENTO ||
+         destino->tipo != CRUZAMENTO ||
+         sinal_permite_movimento(destino, direcao_movimento))) {
+        origem->ocupada = 0;
+        origem->veiculo_id = 0;
+
+        destino->ocupada = 1;
+        destino->veiculo_id = veiculo_id;
+        movido = 1;
+    }
+
+    /*
+     * A origem so e destravada depois de o destino ja estar travado e a
+     * transferencia de ocupacao ter sido decidida.
+     */
+    liberar_celula(origem_i, origem_j);
+    liberar_celula(destino_i, destino_j);
+
+    return movido;
 }
 
 static int direcao_vertical(Direcao direcao) {
