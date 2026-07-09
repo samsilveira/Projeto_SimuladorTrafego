@@ -249,59 +249,54 @@ void* thread_veiculo(void* arg) {
             int movido = 0;
             Celula* cel_destino = &mapa_simulacao.grade[dest_x][dest_y];
 
-            if (pthread_mutex_lock(&cel_destino->mutex) != 0) {
-                continue;
-            }
-
-            // condicao para verificar se o veiculo está entrando no cruzamento ou já está
             int vindo_da_rua = (mapa_simulacao.grade[self->x][self->y].tipo != CRUZAMENTO);
+            int eh_horizontal = (dir_escolhida == ESQUERDA || dir_escolhida == DIREITA);
 
-            // se estiver vindo de uma rua para um cruzamento, verifica o semáforo
-            // caso já esteja no cruzamento, não precisa verificar o semáforo
             if (cel_destino->tipo == CRUZAMENTO && vindo_da_rua) {
-
-                int eh_horizontal = (dir_escolhida == ESQUERDA || dir_escolhida == DIREITA);
-
-                while (simulacao_rodando) {
-                    Cores sinal = eh_horizontal ? cel_destino->sinal_horizontal : cel_destino->sinal_vertical;
-
-                    if (sinal == VERMELHO) {
-                        pthread_cond_wait(&cel_destino->cond_semaforo, &cel_destino->mutex);
-                    } else {
-                        break; // luz verde
-                    }
-                }
-            }
-
-            // luz verde. verifica disponibilidade da célula destino
-            if (cel_destino->ocupada == 0) {
-                int got_current = 0;
-                while (1) {
-                    if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
-                        got_current = 1;
-                        break;
+                if (pthread_mutex_lock(&cel_destino->mutex) == 0) {
+                    while (simulacao_rodando) {
+                        Cores sinal = eh_horizontal ? cel_destino->sinal_horizontal : cel_destino->sinal_vertical;
+                        if (sinal == VERMELHO) {
+                            pthread_cond_wait(&cel_destino->cond_semaforo, &cel_destino->mutex);
+                        } else {
+                            break; 
+                        }
                     }
                     pthread_mutex_unlock(&cel_destino->mutex);
-                    usleep(1000); // 1ms backoff
-                    if (pthread_mutex_lock(&cel_destino->mutex) != 0) break;
-                    if (cel_destino->ocupada != 0) break;
-                }
-
-                if (got_current) {
-                    mapa_simulacao.grade[self->x][self->y].ocupada = 0;
-                    mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
-                    mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
-                    pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
-
-                    cel_destino->ocupada = 1;
-                    cel_destino->veiculo_id = self->id;
-                    cel_destino->tipo_veiculo_ocupante = 0; // CARRO
-                    movido = 1;
                 }
             }
 
-            // destranca célula de destino para evitar deadlocks
-            pthread_mutex_unlock(&cel_destino->mutex);
+            // Prevenção de Deadlock: Método de 'trylock' substituído por Resource Ordering (Ordenação de Recursos).
+            // Trancamos sempre a célula de menor índice de memória primeiro. Isso impossibilita matematicamente
+            // a ocorrência de ciclos de espera (deadlocks) no centro do cruzamento.
+            int idx_atual = self->x * COLUNAS + self->y;
+            int idx_dest = dest_x * COLUNAS + dest_y;
+
+            Celula* cel_min = (idx_atual < idx_dest) ? &mapa_simulacao.grade[self->x][self->y] : cel_destino;
+            Celula* cel_max = (idx_atual < idx_dest) ? cel_destino : &mapa_simulacao.grade[self->x][self->y];
+
+            pthread_mutex_lock(&cel_min->mutex);
+            pthread_mutex_lock(&cel_max->mutex);
+
+            int pode_mover = 1;
+            if (cel_destino->tipo == CRUZAMENTO && vindo_da_rua) {
+                Cores sinal = eh_horizontal ? cel_destino->sinal_horizontal : cel_destino->sinal_vertical;
+                if (sinal == VERMELHO) pode_mover = 0;
+            }
+
+            if (pode_mover && cel_destino->ocupada == 0) {
+                mapa_simulacao.grade[self->x][self->y].ocupada = 0;
+                mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+                mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
+
+                cel_destino->ocupada = 1;
+                cel_destino->veiculo_id = self->id;
+                cel_destino->tipo_veiculo_ocupante = 0; // CARRO
+                movido = 1;
+            }
+
+            pthread_mutex_unlock(&cel_max->mutex);
+            pthread_mutex_unlock(&cel_min->mutex);
 
             if (movido) {
                 self->x = dest_x;
@@ -493,34 +488,31 @@ void* thread_ambulancia(void* arg) {
             int movido = 0;
             Celula* cel_destino = &mapa_simulacao.grade[dest_x][dest_y];
 
-            if (pthread_mutex_lock(&cel_destino->mutex) != 0) continue;
+            // Prevenção de Deadlock: Método de 'trylock' substituído por Resource Ordering (Ordenação de Recursos).
+            // Trancamos sempre a célula de menor índice de memória primeiro. Isso impossibilita matematicamente
+            // a ocorrência de ciclos de espera (deadlocks) no centro do cruzamento.
+            int idx_atual = self->x * COLUNAS + self->y;
+            int idx_dest = dest_x * COLUNAS + dest_y;
+
+            Celula* cel_min = (idx_atual < idx_dest) ? &mapa_simulacao.grade[self->x][self->y] : cel_destino;
+            Celula* cel_max = (idx_atual < idx_dest) ? cel_destino : &mapa_simulacao.grade[self->x][self->y];
+
+            pthread_mutex_lock(&cel_min->mutex);
+            pthread_mutex_lock(&cel_max->mutex);
 
             if (cel_destino->ocupada == 0) {
-                int got_current = 0;
-                while (1) {
-                    if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
-                        got_current = 1;
-                        break;
-                    }
-                    pthread_mutex_unlock(&cel_destino->mutex);
-                    usleep(1000); // 1ms backoff
-                    if (pthread_mutex_lock(&cel_destino->mutex) != 0) break;
-                    if (cel_destino->ocupada != 0) break;
-                }
+                mapa_simulacao.grade[self->x][self->y].ocupada = 0;
+                mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+                mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
 
-                if (got_current) {
-                    mapa_simulacao.grade[self->x][self->y].ocupada = 0;
-                    mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
-                    mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
-                    pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
-
-                    cel_destino->ocupada = 1;
-                    cel_destino->veiculo_id = self->id;
-                    cel_destino->tipo_veiculo_ocupante = 1;
-                    movido = 1;
-                }
+                cel_destino->ocupada = 1;
+                cel_destino->veiculo_id = self->id;
+                cel_destino->tipo_veiculo_ocupante = 1; // AMBULANCIA
+                movido = 1;
             }
-            pthread_mutex_unlock(&cel_destino->mutex);
+
+            pthread_mutex_unlock(&cel_max->mutex);
+            pthread_mutex_unlock(&cel_min->mutex);
 
             if (movido) {
                 self->x = dest_x;
