@@ -46,9 +46,10 @@ void* thread_relogio(void* arg) {
         int ativos = veiculos_ativos;
         pthread_mutex_unlock(&mutex_veiculos);
 
-        printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick, ativos, num_veiculos_meta);
         if (overrides_ativos > 0) {
-            printf("\033[31m*** OVERRIDE DE EMERGENCIA ATIVO ***\033[0m\n");
+            printf("Tick: %d | Veiculos Ativos: %d / %d | \033[31m* OVERRIDE DE EMERGENCIA ATIVO *\033[0m\n", tick, ativos, num_veiculos_meta);
+        } else {
+            printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick, ativos, num_veiculos_meta);
         }
 
         imprimir_mapa();
