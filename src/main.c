@@ -7,6 +7,8 @@
 #include "config.h"
 #include "globals.h"
 #include "veiculo.h"
+#include <ncurses.h>
+#include "logger.h"
 
 // === INICIALIZAÇÃO DAS VARIÁVEIS GLOBAIS DO RELÓGIO (Sua Task) ===
 pthread_mutex_t mutex_relogio = PTHREAD_MUTEX_INITIALIZER;
@@ -32,23 +34,16 @@ void* thread_relogio(void* arg) {
     while (simulacao_rodando) {
         usleep(tick_ms * 1000);
 
-        // Imprime o estado resultante no terminal (limpando a tela com ANSI escape code)
-        printf("\033[H\033[J");
-        printf("=== SIMULADOR DE TRAFEGO URBANO ===\n");
-
         pthread_mutex_lock(&mutex_relogio);
         int tick = tick_atual;
         pthread_mutex_unlock(&mutex_relogio);
 
-        // Esta trava pertence ao sistema de spawn (outra task), mantemos como está
         pthread_mutex_lock(&mutex_veiculos);
         int ativos = veiculos_ativos;
         pthread_mutex_unlock(&mutex_veiculos);
 
-        printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick, ativos, num_veiculos_meta);
-
-        imprimir_mapa();
-        fflush(stdout);
+        // Agora a ncurses cuida de toda a impressão limpa!
+        imprimir_mapa(tick, ativos, num_veiculos_meta);
 
         // Avança o relógio e acorda as threads de veículos
         pthread_mutex_lock(&mutex_relogio);
@@ -157,6 +152,18 @@ int main(int argc, char *argv[]) {
     // Semente do gerador aleatório
     srand(time(NULL));
 
+    log_init("debug.log");
+    log_event("Simulacao iniciada. Meta: %d veiculos", cfg.num_veiculos);
+
+    initscr();
+    noecho();
+    curs_set(0);
+    start_color();
+    init_pair(1, COLOR_WHITE, COLOR_BLACK);
+    init_pair(2, COLOR_CYAN, COLOR_BLACK);
+    init_pair(3, COLOR_RED, COLOR_BLACK);
+    init_pair(4, COLOR_YELLOW, COLOR_BLACK);
+
     // Cria a thread gerenciadora de spawn
     pthread_t thread_spawn_id;
     if (pthread_create(&thread_spawn_id, NULL, thread_gerenciadora_spawn, NULL) != 0) {
@@ -175,6 +182,9 @@ int main(int argc, char *argv[]) {
     // Para simplificar, a main pode esperar as threads terminarem (o que não acontece na execução contínua)
     pthread_join(thread_relogio_id, NULL);
     pthread_join(thread_spawn_id, NULL);
+
+    endwin();
+    log_close();
 
     return EXIT_SUCCESS;
 }

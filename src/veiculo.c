@@ -93,13 +93,19 @@ int tentar_spawn_veiculo(void) {
                 v->y = sy;
                 v->direcao_atual = pontos_spawn[idx].direcao_inicial;
 
-                // Distribuição de velocidades
-                int r_vel = rand_safe() % 3;
-                if (r_vel == 0) v->velocidade = RAPIDO;
-                else if (r_vel == 1) v->velocidade = MEDIO;
-                else v->velocidade = LENTO;
+                // Sorteia se vai ser Carro (90%) ou Ambulancia (10%)
+                if (rand_safe() % 10 == 0) {
+                    v->tipo = AMBULANCIA;
+                    v->velocidade = RAPIDO; // Ambulancia sempre corre!
+                } else {
+                    v->tipo = CARRO;
+                    // Distribuição de velocidades normal para carros
+                    int r_vel = rand_safe() % 3;
+                    if (r_vel == 0) v->velocidade = RAPIDO;
+                    else if (r_vel == 1) v->velocidade = MEDIO;
+                    else v->velocidade = LENTO;
+                }
 
-                v->tipo = CARRO;
                 v->ticks_acumulados = 0;
                 v->passos_restantes = 25 + rand_safe() % 35; // Entre 25 e 60 passos de vida
 

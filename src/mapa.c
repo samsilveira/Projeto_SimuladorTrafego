@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "globals.h"
+#include <ncurses.h>
 
 Mapa mapa_simulacao;
 
@@ -153,29 +154,60 @@ void inicializar_mapa(void) {
     remover_direcoes_invalidas();
 }
 
-void imprimir_mapa(void) {
+#define COR_RUA 1
+#define COR_CARRO 2
+#define COR_AMB 3
+#define COR_CRUZ 4
+
+static char char_direcao(Direcao dir) {
+    if (dir == CIMA) return '^';
+    if (dir == BAIXO) return 'v';
+    if (dir == ESQUERDA) return '<';
+    if (dir == DIREITA) return '>';
+    return 'O';
+}
+
+void imprimir_mapa(int tick, int ativos, int meta) {
+    clear(); 
+    
+    mvprintw(0, 0, "=== SIMULADOR DE TRAFEGO URBANO ===");
+    mvprintw(1, 0, "Tick: %d | Veiculos Ativos: %d / %d", tick, ativos, meta);
+    mvprintw(2, 0, "Legenda: [=] Rua  [+] Cruzamento  [^v<>] Carros  [A] Ambulancia");
+
     for (int i = 0; i < LINHAS; i++) {
         for (int j = 0; j < COLUNAS; j++) {
             pthread_mutex_lock(&mapa_simulacao.grade[i][j].mutex);
             int ocupada = mapa_simulacao.grade[i][j].ocupada;
-            int veiculo_id = mapa_simulacao.grade[i][j].veiculo_id;
             TipoCelula tipo = mapa_simulacao.grade[i][j].tipo;
-            Direcao direcao = mapa_simulacao.grade[i][j].direcao;
+            Direcao dir_v = mapa_simulacao.grade[i][j].direcao_veiculo;
+            int amb = mapa_simulacao.grade[i][j].eh_ambulancia;
             pthread_mutex_unlock(&mapa_simulacao.grade[i][j].mutex);
 
+            int py = i + 4; 
+            int px = j * 3; 
+
             if (ocupada) {
-                printf("%2d ", veiculo_id);
-            } else {
-                char c;
-                switch (tipo) {
-                    case CALCADA: c = '.'; break;
-                    case RUA: c = simbolo_rua(direcao); break;
-                    case CRUZAMENTO: c = 'X'; break;
-                    default: c = '?'; break;
+                if (amb) {
+                    attron(COLOR_PAIR(COR_AMB));
+                    mvprintw(py, px, " A ");
+                    attroff(COLOR_PAIR(COR_AMB));
+                } else {
+                    attron(COLOR_PAIR(COR_CARRO));
+                    mvprintw(py, px, " %c ", char_direcao(dir_v));
+                    attroff(COLOR_PAIR(COR_CARRO));
                 }
-                printf(" %c ", c);
+            } else {
+                if (tipo == RUA) {
+                    attron(COLOR_PAIR(COR_RUA));
+                    mvprintw(py, px, " = ");
+                    attroff(COLOR_PAIR(COR_RUA));
+                } else if (tipo == CRUZAMENTO) {
+                    attron(COLOR_PAIR(COR_CRUZ));
+                    mvprintw(py, px, " + ");
+                    attroff(COLOR_PAIR(COR_CRUZ));
+                }
             }
         }
-        printf("\n");
     }
+    refresh();
 }
