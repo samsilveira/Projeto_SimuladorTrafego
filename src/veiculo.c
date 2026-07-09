@@ -270,8 +270,19 @@ void* thread_veiculo(void* arg) {
 
             // luz verde. verifica disponibilidade da célula destino
             if (cel_destino->ocupada == 0) {
-                // usa trylock e evita espera circular
-                if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
+                int got_current = 0;
+                while (1) {
+                    if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
+                        got_current = 1;
+                        break;
+                    }
+                    pthread_mutex_unlock(&cel_destino->mutex);
+                    usleep(1000); // 1ms backoff
+                    if (pthread_mutex_lock(&cel_destino->mutex) != 0) break;
+                    if (cel_destino->ocupada != 0) break;
+                }
+
+                if (got_current) {
                     mapa_simulacao.grade[self->x][self->y].ocupada = 0;
                     mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
                     mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
@@ -476,7 +487,19 @@ void* thread_ambulancia(void* arg) {
             if (pthread_mutex_lock(&cel_destino->mutex) != 0) continue;
 
             if (cel_destino->ocupada == 0) {
-                if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
+                int got_current = 0;
+                while (1) {
+                    if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
+                        got_current = 1;
+                        break;
+                    }
+                    pthread_mutex_unlock(&cel_destino->mutex);
+                    usleep(1000); // 1ms backoff
+                    if (pthread_mutex_lock(&cel_destino->mutex) != 0) break;
+                    if (cel_destino->ocupada != 0) break;
+                }
+
+                if (got_current) {
                     mapa_simulacao.grade[self->x][self->y].ocupada = 0;
                     mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
                     mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
