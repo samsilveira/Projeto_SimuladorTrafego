@@ -44,15 +44,11 @@ static void encerrar_simulacao(void) {
     }
 }
 
-static void* thread_sinais(void* arg) {
-    sigset_t *sinais = (sigset_t*)arg;
-    int sinal_recebido;
-
-    if (sigwait(sinais, &sinal_recebido) == 0) {
+static void tratador_sinal(int sig) {
+    if (sig == SIGINT || sig == SIGTERM) {
+        printf("\n[SINAL] Sinal (%d) recebido. Encerrando o simulador de forma limpa...\n", sig);
         encerrar_simulacao();
     }
-
-    return NULL;
 }
 
 void print_help(const char *prog_name) {
@@ -165,7 +161,6 @@ void* thread_gerenciadora_spawn(void* arg) {
 int main(int argc, char *argv[]) {
     Config cfg = {0};
     int opt;
-    sigset_t sinais;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
@@ -194,10 +189,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    sigemptyset(&sinais);
-    sigaddset(&sinais, SIGINT);
-    sigaddset(&sinais, SIGTERM);
-    pthread_sigmask(SIG_BLOCK, &sinais, NULL);
+    signal(SIGINT, tratador_sinal);
+    signal(SIGTERM, tratador_sinal);
 
     // Inicializa o mapa da simulação
     inicializar_mapa();
@@ -209,11 +202,7 @@ int main(int argc, char *argv[]) {
     // Semente do gerador aleatório
     srand(time(NULL));
 
-    pthread_t thread_sinais_id;
-    if (pthread_create(&thread_sinais_id, NULL, thread_sinais, (void*)&sinais) != 0) {
-        fprintf(stderr, "Erro ao criar thread de sinais.\n");
-        return EXIT_FAILURE;
-    }
+
 
     // Cria a thread gerenciadora de spawn
     pthread_t thread_spawn_id;
@@ -233,7 +222,6 @@ int main(int argc, char *argv[]) {
     // Para simplificar, a main pode esperar as threads terminarem (o que não acontece na execução contínua)
     pthread_join(thread_relogio_id, NULL);
     pthread_join(thread_spawn_id, NULL);
-    pthread_join(thread_sinais_id, NULL);
     destruir_mutexes_mapa();
 
     return EXIT_SUCCESS;
