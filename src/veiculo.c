@@ -95,7 +95,7 @@ int tentar_spawn_veiculo(void) {
 
                 // Chance de 10% de ser ambulância, ou 100% caso não exista nenhuma ativa
                 int r_tipo = rand_safe() % 100;
-                
+
                 int num_amb = ambulancias_ativas;
 
                 if (num_amb == 0 || r_tipo < 10) {
@@ -235,7 +235,12 @@ void* thread_veiculo(void* arg) {
         }
 
         // Sorteia direção no cruzamento/via
-        Direcao dir_escolhida = vetor_opcoes[rand_safe() % num_opcoes];
+        Direcao dir_escolhida;
+        if (num_opcoes > 1) {
+            dir_escolhida = vetor_opcoes[(rand_safe() >> 8) % num_opcoes];
+        } else {
+            dir_escolhida = vetor_opcoes[0];
+        }
 
         int dest_x = self->x;
         int dest_y = self->y;
@@ -259,7 +264,7 @@ void* thread_veiculo(void* arg) {
                         if (sinal == VERMELHO) {
                             pthread_cond_wait(&cel_destino->cond_semaforo, &cel_destino->mutex);
                         } else {
-                            break; 
+                            break;
                         }
                     }
                     pthread_mutex_unlock(&cel_destino->mutex);
@@ -407,7 +412,14 @@ void* thread_ambulancia(void* arg) {
         if (num_opcoes == 0 && (opcoes_direcao & dir_oposta)) vetor_opcoes[num_opcoes++] = dir_oposta;
         if (num_opcoes == 0) continue;
 
-        Direcao dir_escolhida = vetor_opcoes[rand_safe() % num_opcoes];
+        Direcao dir_escolhida;
+        if (num_opcoes > 1) {
+            dir_escolhida = vetor_opcoes[(rand_safe() >> 8) % num_opcoes];
+        } else if (num_opcoes == 1) {
+            dir_escolhida = vetor_opcoes[0];
+        } else {
+            dir_escolhida = self->direcao_atual;
+        }
 
         int dest_x = self->x;
         int dest_y = self->y;
