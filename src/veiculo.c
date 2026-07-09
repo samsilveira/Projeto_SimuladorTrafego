@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include "veiculo.h"
 #include "globals.h"
+#include "logger.h"
 
 // Variáveis globais para controle de ciclo de vida dos veículos (mantidas da sua equipe)
 int veiculos_ativos = 0;
@@ -104,6 +105,9 @@ int tentar_spawn_veiculo(void) {
 
                 mapa_simulacao.grade[sx][sy].ocupada = 1;
                 mapa_simulacao.grade[sx][sy].veiculo_id = v->id;
+                mapa_simulacao.grade[sx][sy].direcao_veiculo = v->direcao_atual;
+                mapa_simulacao.grade[sx][sy].eh_ambulancia = (v->tipo == AMBULANCIA);
+                log_event("Veiculo %d (Tipo: %d) instanciado em [%d, %d]", v->id, v->tipo, sx, sy);
 
                 pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
 
@@ -265,6 +269,8 @@ void* thread_veiculo(void* arg) {
 
                     cel_destino->ocupada = 1;
                     cel_destino->veiculo_id = self->id;
+                    cel_destino->direcao_veiculo = dir_escolhida;
+                    cel_destino->eh_ambulancia = (self->tipo == AMBULANCIA);
                     movido = 1;
                 }
             }
