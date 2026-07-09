@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
+#include <signal.h>
 #include <time.h>
 #include "config.h"
 #include "globals.h"
@@ -18,6 +19,43 @@ int simulacao_rodando = 1;
 
 static int num_veiculos_meta = 0;
 
+int simulacao_esta_rodando(void) {
+    pthread_mutex_lock(&mutex_relogio);
+    int rodando = simulacao_rodando;
+    pthread_mutex_unlock(&mutex_relogio);
+    return rodando;
+}
+
+static void encerrar_simulacao(void) {
+    pthread_mutex_lock(&mutex_relogio);
+    simulacao_rodando = 0;
+    pthread_cond_broadcast(&cond_relogio);
+    pthread_mutex_unlock(&mutex_relogio);
+
+    pthread_mutex_lock(&mutex_veiculos);
+    pthread_cond_broadcast(&cond_spawn);
+    pthread_mutex_unlock(&mutex_veiculos);
+
+    for (int i = 0; i < LINHAS; i++) {
+        for (int j = 0; j < COLUNAS; j++) {
+            travar_celula(i, j);
+            pthread_cond_broadcast(&mapa_simulacao.grade[i][j].cond_semaforo);
+            liberar_celula(i, j);
+        }
+    }
+}
+
+static void* thread_sinais(void* arg) {
+    sigset_t *sinais = (sigset_t*)arg;
+    int sinal_recebido;
+
+    if (sigwait(sinais, &sinal_recebido) == 0) {
+        encerrar_simulacao();
+    }
+
+    return NULL;
+}
+
 void print_help(const char *prog_name) {
     printf("Uso: %s -v <veiculos> -t <tick_ms> [-m <mapa.txt>]\n", prog_name);
     printf("Opcoes:\n");
@@ -31,7 +69,7 @@ void print_help(const char *prog_name) {
 // Responsável por incrementar o tick global, notificar os veículos e atualizar a exibição.
 void* thread_relogio(void* arg) {
     int tick_ms = *(int*)arg;
-    while (simulacao_rodando) {
+    while (simulacao_esta_rodando()) {
         usleep(tick_ms * 1000);
 
         pthread_mutex_lock(&mutex_relogio);
@@ -56,10 +94,10 @@ void* thread_relogio(void* arg) {
         if (alternar) {
             for (int i = 0; i < LINHAS; i++) {
                 for (int j = 0; j < COLUNAS; j++) {
+                    travar_celula(i, j);
+
                     // só influencia nos semáforos inseridos nos CRUZAMENTOS
                     if (mapa_simulacao.grade[i][j].tipo == CRUZAMENTO) {
-                        pthread_mutex_lock(&mapa_simulacao.grade[i][j].mutex);
-
                         if (mapa_simulacao.grade[i][j].sinal_horizontal == VERDE) {
                             mapa_simulacao.grade[i][j].sinal_horizontal = VERMELHO;
                             mapa_simulacao.grade[i][j].sinal_vertical = VERDE;
@@ -69,8 +107,9 @@ void* thread_relogio(void* arg) {
                         }
 
                         pthread_cond_broadcast(&mapa_simulacao.grade[i][j].cond_semaforo);
-                        pthread_mutex_unlock(&mapa_simulacao.grade[i][j].mutex);
                     }
+
+                    liberar_celula(i, j);
                 }
             }
         }
@@ -83,7 +122,7 @@ void* thread_relogio(void* arg) {
 void* thread_gerenciadora_spawn(void* arg) {
     (void)arg;
 
-    while (simulacao_rodando) {
+    while (simulacao_esta_rodando()) {
         pthread_mutex_lock(&mutex_veiculos);
 
         while (veiculos_ativos < num_veiculos_meta) {
@@ -114,6 +153,7 @@ void* thread_gerenciadora_spawn(void* arg) {
 int main(int argc, char *argv[]) {
     Config cfg = {0};
     int opt;
+    sigset_t sinais;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
@@ -142,6 +182,11 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    sigemptyset(&sinais);
+    sigaddset(&sinais, SIGINT);
+    sigaddset(&sinais, SIGTERM);
+    pthread_sigmask(SIG_BLOCK, &sinais, NULL);
+
     // Inicializa o mapa da simulação
     inicializar_mapa();
 
@@ -152,6 +197,7 @@ int main(int argc, char *argv[]) {
     // Semente do gerador aleatório
     srand(time(NULL));
 
+    // === INICIALIZAÇÃO TUI E LOGS ===
     log_init("debug.log");
     log_event("Simulacao iniciada. Meta: %d veiculos", cfg.num_veiculos);
 
@@ -163,6 +209,13 @@ int main(int argc, char *argv[]) {
     init_pair(2, COLOR_CYAN, COLOR_BLACK);
     init_pair(3, COLOR_RED, COLOR_BLACK);
     init_pair(4, COLOR_YELLOW, COLOR_BLACK);
+
+    // === CRIAÇÃO DA THREAD DE SINAIS ===
+    pthread_t thread_sinais_id;
+    if (pthread_create(&thread_sinais_id, NULL, thread_sinais, (void*)&sinais) != 0) {
+        fprintf(stderr, "Erro ao criar thread de sinais.\n");
+        return EXIT_FAILURE;
+    }
 
     // Cria a thread gerenciadora de spawn
     pthread_t thread_spawn_id;
@@ -182,6 +235,8 @@ int main(int argc, char *argv[]) {
     // Para simplificar, a main pode esperar as threads terminarem (o que não acontece na execução contínua)
     pthread_join(thread_relogio_id, NULL);
     pthread_join(thread_spawn_id, NULL);
+    pthread_join(thread_sinais_id, NULL);
+    destruir_mutexes_mapa();
 
     endwin();
     log_close();
