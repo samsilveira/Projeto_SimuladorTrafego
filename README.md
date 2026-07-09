@@ -19,9 +19,9 @@ Este projeto consiste em uma simulação concorrente de tráfego urbano desenvol
 ## Tecnologias e Mecanismos
 
 - Linguagem: C
-- Biblioteca: Pthreads
+- Biblioteca: Pthreads (concorrência) e Ncurses (interface gráfica no terminal)
 - Sincronização: Mutex, Semáforos e Variáveis de Condição
-- Interface: Terminal (Visualização ASCII)
+- Interface: Terminal (Text User Interface - TUI)
 
 ## Regras da Simulação
 
@@ -30,6 +30,28 @@ Este projeto consiste em uma simulação concorrente de tráfego urbano desenvol
 - Não é permitida a ocupação simultânea de uma mesma célula (impenetrabilidade).
 - O movimento é coordenado por um relógio global discreto (ticks).
 - Implementação de estratégias para evitar deadlocks nos cruzamentos.
+
+## Visualização e Logs
+
+A simulação conta com uma interface dinâmica no terminal atualizada a cada tick. 
+
+**Legenda Visual:**
+- ` = ` : Ruas e vias da malha.
+- ` + ` : Cruzamentos (protegidos por mutex e variáveis de condição).
+- `^ v < >` : Veículos comuns (a seta indica a direção do movimento).
+- ` A ` : Ambulância em trânsito (destaque em vermelho).
+
+**Sistema de Logs:** Durante a execução, a engine gera automaticamente um arquivo `debug.log` na raiz do projeto, registrando o ciclo de vida dos veículos (spawn/despawn) e eventos de emergência em tempo real.
+
+## Pré-requisitos e Dependências
+
+Para que a interface visual funcione corretamente, é necessário ter a biblioteca **Ncurses** instalada no seu ambiente Linux. 
+
+**No Ubuntu/Debian ou WSL:**
+```bash
+sudo apt-get update
+sudo apt-get install libncurses5-dev libncursesw5-dev
+```
 
 ## Compilação e Execução
 

@@ -135,8 +135,8 @@ int tentar_spawn_veiculo(void) {
                 v->y = sy;
                 v->direcao_atual = pontos_spawn[idx].direcao_inicial;
 
-                // Sorteia se vai ser Carro (90%) ou Ambulancia (10%)
-                if (rand_safe() % 10 == 0) {
+                // Sorteia se vai ser Carro (80%) ou Ambulancia (20%)
+                if (rand_safe() % 5 == 0) {
                     v->tipo = AMBULANCIA;
                     v->velocidade = RAPIDO; // Ambulancia sempre corre!
                 } else {
