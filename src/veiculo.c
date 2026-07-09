@@ -6,6 +6,7 @@
 
 // Variáveis globais para controle de ciclo de vida dos veículos (mantidas da sua equipe)
 int veiculos_ativos = 0;
+int ambulancias_ativas = 0;
 pthread_mutex_t mutex_veiculos = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_spawn = PTHREAD_COND_INITIALIZER;
 
@@ -92,11 +93,15 @@ int tentar_spawn_veiculo(void) {
                 v->y = sy;
                 v->direcao_atual = pontos_spawn[idx].direcao_inicial;
 
-                // Chance de 25% de ser ambulância
+                // Chance de 10% de ser ambulância, ou 100% caso não exista nenhuma ativa
                 int r_tipo = rand_safe() % 100;
-                if (r_tipo < 10) {
+                
+                int num_amb = ambulancias_ativas;
+
+                if (num_amb == 0 || r_tipo < 10) {
                     v->tipo = AMBULANCIA;
                     v->velocidade = RAPIDO;
+                    ambulancias_ativas++;
                 } else {
                     v->tipo = CARRO;
                     // Distribuição de velocidades
@@ -338,7 +343,7 @@ void* thread_ambulancia(void* arg) {
                 if (radar_x[i] != -1 && radar_y[i] != -1 && dentro_mapa(radar_x[i], radar_y[i])) {
                     pthread_mutex_lock(&mapa_simulacao.grade[radar_x[i]][radar_y[i]].mutex);
                     if (mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia > 0) {
-                        mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia = 0;
+                        mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia--;
                     }
                     pthread_mutex_unlock(&mapa_simulacao.grade[radar_x[i]][radar_y[i]].mutex);
                     pthread_mutex_lock(&mutex_veiculos);
@@ -352,6 +357,7 @@ void* thread_ambulancia(void* arg) {
             mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
             pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
             pthread_mutex_lock(&mutex_veiculos);
+            ambulancias_ativas--;
             veiculos_ativos--;
             pthread_cond_signal(&cond_spawn);
             pthread_mutex_unlock(&mutex_veiculos);
@@ -368,7 +374,7 @@ void* thread_ambulancia(void* arg) {
                 if (radar_x[i] != -1 && radar_y[i] != -1 && dentro_mapa(radar_x[i], radar_y[i])) {
                     pthread_mutex_lock(&mapa_simulacao.grade[radar_x[i]][radar_y[i]].mutex);
                     if (mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia > 0) {
-                        mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia = 0;
+                        mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia--;
                     }
                     pthread_mutex_unlock(&mapa_simulacao.grade[radar_x[i]][radar_y[i]].mutex);
                     pthread_mutex_lock(&mutex_veiculos);
@@ -382,6 +388,7 @@ void* thread_ambulancia(void* arg) {
             mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
             pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
             pthread_mutex_lock(&mutex_veiculos);
+            ambulancias_ativas--;
             veiculos_ativos--;
             pthread_cond_signal(&cond_spawn);
             pthread_mutex_unlock(&mutex_veiculos);
@@ -445,7 +452,9 @@ void* thread_ambulancia(void* arg) {
                 }
 
                 pthread_mutex_lock(&cel->mutex);
-                cel->override_emergencia = 1;
+                if (!ja_estava) {
+                    cel->override_emergencia++;
+                }
                 int eh_horizontal = (dir_escolhida == ESQUERDA || dir_escolhida == DIREITA);
                 if (eh_horizontal) {
                     cel->sinal_horizontal = VERDE;
@@ -469,7 +478,7 @@ void* thread_ambulancia(void* arg) {
             if (radar_x[j] != -1 && radar_y[j] != -1) {
                 Celula* cel = &mapa_simulacao.grade[radar_x[j]][radar_y[j]];
                 pthread_mutex_lock(&cel->mutex);
-                if (cel->override_emergencia > 0) cel->override_emergencia = 0;
+                if (cel->override_emergencia > 0) cel->override_emergencia--;
                 pthread_mutex_unlock(&cel->mutex);
 
                 pthread_mutex_lock(&mutex_veiculos);
