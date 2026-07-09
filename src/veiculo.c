@@ -312,7 +312,6 @@ void* thread_veiculo(void* arg) {
 
     return NULL;
 }
-<<<<<<< HEAD
 
 void* thread_ambulancia(void* arg) {
     Veiculo* self = (Veiculo*)arg;
@@ -343,7 +342,7 @@ void* thread_ambulancia(void* arg) {
                         mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia--;
                     }
                     liberar_celula(radar_x[i], radar_y[i]);
-                    
+
                     pthread_mutex_lock(&mutex_veiculos);
                     overrides_ativos--;
                     pthread_mutex_unlock(&mutex_veiculos);
@@ -354,7 +353,7 @@ void* thread_ambulancia(void* arg) {
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
             mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
             liberar_celula(self->x, self->y);
-            
+
             pthread_mutex_lock(&mutex_veiculos);
             ambulancias_ativas--;
             veiculos_ativos--;
@@ -376,7 +375,7 @@ void* thread_ambulancia(void* arg) {
                         mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia--;
                     }
                     liberar_celula(radar_x[i], radar_y[i]);
-                    
+
                     pthread_mutex_lock(&mutex_veiculos);
                     overrides_ativos--;
                     pthread_mutex_unlock(&mutex_veiculos);
@@ -387,7 +386,7 @@ void* thread_ambulancia(void* arg) {
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
             mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
             liberar_celula(self->x, self->y);
-            
+
             pthread_mutex_lock(&mutex_veiculos);
             ambulancias_ativas--;
             veiculos_ativos--;
