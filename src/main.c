@@ -12,6 +12,7 @@
 pthread_mutex_t mutex_relogio = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_relogio = PTHREAD_COND_INITIALIZER;
 int tick_atual = 0;
+int overrides_ativos = 0;
 int simulacao_rodando = 1;
 
 static int num_veiculos_meta = 0;
@@ -46,6 +47,9 @@ void* thread_relogio(void* arg) {
         pthread_mutex_unlock(&mutex_veiculos);
 
         printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick, ativos, num_veiculos_meta);
+        if (overrides_ativos > 0) {
+            printf("\033[31m*** OVERRIDE DE EMERGENCIA ATIVO ***\033[0m\n");
+        }
 
         imprimir_mapa();
         fflush(stdout);
@@ -62,18 +66,20 @@ void* thread_relogio(void* arg) {
             for (int i = 0; i < LINHAS; i++) {
                 for (int j = 0; j < COLUNAS; j++) {
                     // só influencia nos semáforos inseridos nos CRUZAMENTOS
-                    if (mapa_simulacao.grade[i][j].tipo == CRUZAMENTO) {
+                        if (mapa_simulacao.grade[i][j].tipo == CRUZAMENTO) {
                         pthread_mutex_lock(&mapa_simulacao.grade[i][j].mutex);
 
-                        if (mapa_simulacao.grade[i][j].sinal_horizontal == VERDE) {
-                            mapa_simulacao.grade[i][j].sinal_horizontal = VERMELHO;
-                            mapa_simulacao.grade[i][j].sinal_vertical = VERDE;
-                        } else {
-                            mapa_simulacao.grade[i][j].sinal_vertical = VERMELHO;
-                            mapa_simulacao.grade[i][j].sinal_horizontal = VERDE;
+                        if (mapa_simulacao.grade[i][j].override_emergencia == 0) {
+                            if (mapa_simulacao.grade[i][j].sinal_horizontal == VERDE) {
+                                mapa_simulacao.grade[i][j].sinal_horizontal = VERMELHO;
+                                mapa_simulacao.grade[i][j].sinal_vertical = VERDE;
+                            } else {
+                                mapa_simulacao.grade[i][j].sinal_vertical = VERMELHO;
+                                mapa_simulacao.grade[i][j].sinal_horizontal = VERDE;
+                            }
+                            pthread_cond_broadcast(&mapa_simulacao.grade[i][j].cond_semaforo);
                         }
 
-                        pthread_cond_broadcast(&mapa_simulacao.grade[i][j].cond_semaforo);
                         pthread_mutex_unlock(&mapa_simulacao.grade[i][j].mutex);
                     }
                 }

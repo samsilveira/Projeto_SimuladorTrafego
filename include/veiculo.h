@@ -27,6 +27,7 @@ typedef struct Veiculo {
 
 // Assinaturas das funções da engine de veículos
 void* thread_veiculo(void* arg);
+void* thread_ambulancia(void* arg);
 int tentar_spawn_veiculo(void);
 void inicializar_sistema_veiculos(void);
 

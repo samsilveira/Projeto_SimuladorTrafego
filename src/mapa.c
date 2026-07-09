@@ -131,6 +131,8 @@ void inicializar_mapa(void) {
             pthread_cond_init(&mapa_simulacao.grade[i][j].cond_semaforo, NULL);
             mapa_simulacao.grade[i][j].sinal_horizontal = VERDE;
             mapa_simulacao.grade[i][j].sinal_vertical = VERMELHO;
+            mapa_simulacao.grade[i][j].override_emergencia = 0;
+            mapa_simulacao.grade[i][j].tipo_veiculo_ocupante = 0; // 0 para CARRO
         }
     }
 
@@ -161,19 +163,30 @@ void imprimir_mapa(void) {
             int veiculo_id = mapa_simulacao.grade[i][j].veiculo_id;
             TipoCelula tipo = mapa_simulacao.grade[i][j].tipo;
             Direcao direcao = mapa_simulacao.grade[i][j].direcao;
+            int tipo_ocupante = mapa_simulacao.grade[i][j].tipo_veiculo_ocupante;
+            int em_override = mapa_simulacao.grade[i][j].override_emergencia;
             pthread_mutex_unlock(&mapa_simulacao.grade[i][j].mutex);
 
             if (ocupada) {
-                printf("%2d ", veiculo_id);
+                if (tipo_ocupante == 1) { // 1 = AMBULANCIA
+                    printf("\033[31m A \033[0m");
+                } else {
+                    printf("%2d ", veiculo_id);
+                }
             } else {
                 char c;
                 switch (tipo) {
                     case CALCADA: c = '.'; break;
                     case RUA: c = simbolo_rua(direcao); break;
-                    case CRUZAMENTO: c = 'X'; break;
+                    case CRUZAMENTO: c = em_override ? 'E' : 'X'; break;
                     default: c = '?'; break;
                 }
-                printf(" %c ", c);
+                
+                if (em_override && tipo == CRUZAMENTO) {
+                    printf("\033[31m %c \033[0m", c);
+                } else {
+                    printf(" %c ", c);
+                }
             }
         }
         printf("\n");

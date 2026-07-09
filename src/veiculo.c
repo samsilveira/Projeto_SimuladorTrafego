@@ -92,26 +92,37 @@ int tentar_spawn_veiculo(void) {
                 v->y = sy;
                 v->direcao_atual = pontos_spawn[idx].direcao_inicial;
 
-                // Distribuição de velocidades
-                int r_vel = rand_safe() % 3;
-                if (r_vel == 0) v->velocidade = RAPIDO;
-                else if (r_vel == 1) v->velocidade = MEDIO;
-                else v->velocidade = LENTO;
+                // Chance de 25% de ser ambulância
+                int r_tipo = rand_safe() % 100;
+                if (r_tipo < 10) {
+                    v->tipo = AMBULANCIA;
+                    v->velocidade = RAPIDO;
+                } else {
+                    v->tipo = CARRO;
+                    // Distribuição de velocidades
+                    int r_vel = rand_safe() % 3;
+                    if (r_vel == 0) v->velocidade = RAPIDO;
+                    else if (r_vel == 1) v->velocidade = MEDIO;
+                    else v->velocidade = LENTO;
+                }
 
-                v->tipo = CARRO;
                 v->ticks_acumulados = 0;
                 v->passos_restantes = 25 + rand_safe() % 35; // Entre 25 e 60 passos de vida
 
                 mapa_simulacao.grade[sx][sy].ocupada = 1;
                 mapa_simulacao.grade[sx][sy].veiculo_id = v->id;
+                mapa_simulacao.grade[sx][sy].tipo_veiculo_ocupante = (v->tipo == AMBULANCIA) ? 1 : 0;
 
                 pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
 
                 pthread_t t;
-                if (pthread_create(&t, NULL, thread_veiculo, (void*)v) != 0) {
+                void* (*funcao_thread)(void*) = (v->tipo == AMBULANCIA) ? thread_ambulancia : thread_veiculo;
+
+                if (pthread_create(&t, NULL, funcao_thread, (void*)v) != 0) {
                     pthread_mutex_lock(&mapa_simulacao.grade[sx][sy].mutex);
                     mapa_simulacao.grade[sx][sy].ocupada = 0;
                     mapa_simulacao.grade[sx][sy].veiculo_id = 0;
+                    mapa_simulacao.grade[sx][sy].tipo_veiculo_ocupante = 0;
                     pthread_mutex_unlock(&mapa_simulacao.grade[sx][sy].mutex);
                     free(v);
                     return -1;
@@ -157,6 +168,7 @@ void* thread_veiculo(void* arg) {
             pthread_mutex_lock(&mapa_simulacao.grade[self->x][self->y].mutex);
             mapa_simulacao.grade[self->x][self->y].ocupada = 0;
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+            mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
             pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
 
             pthread_mutex_lock(&mutex_veiculos);
@@ -178,6 +190,7 @@ void* thread_veiculo(void* arg) {
             pthread_mutex_lock(&mapa_simulacao.grade[self->x][self->y].mutex);
             mapa_simulacao.grade[self->x][self->y].ocupada = 0;
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+            mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
             pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
 
             pthread_mutex_lock(&mutex_veiculos);
@@ -261,10 +274,12 @@ void* thread_veiculo(void* arg) {
                 if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
                     mapa_simulacao.grade[self->x][self->y].ocupada = 0;
                     mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+                    mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
                     pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
 
                     cel_destino->ocupada = 1;
                     cel_destino->veiculo_id = self->id;
+                    cel_destino->tipo_veiculo_ocupante = 0; // CARRO
                     movido = 1;
                 }
             }
@@ -283,5 +298,205 @@ void* thread_veiculo(void* arg) {
         }
     }
 
+    return NULL;
+}
+
+void* thread_ambulancia(void* arg) {
+    Veiculo* self = (Veiculo*)arg;
+    pthread_detach(pthread_self());
+
+    int radar_x[3] = {-1, -1, -1};
+    int radar_y[3] = {-1, -1, -1};
+
+    while (1) {
+        pthread_mutex_lock(&mutex_relogio);
+        int tick_esperado = tick_atual;
+        while (tick_atual == tick_esperado && simulacao_rodando) {
+            pthread_cond_wait(&cond_relogio, &mutex_relogio);
+        }
+        pthread_mutex_unlock(&mutex_relogio);
+
+        if (!simulacao_rodando) break;
+
+        self->ticks_acumulados++;
+        if (self->ticks_acumulados < (int)self->velocidade) continue;
+        self->ticks_acumulados = 0;
+
+        if (self->passos_restantes <= 0 && eh_ponto_despawn(self->x, self->y)) {
+            for (int i = 0; i < 3; i++) {
+                if (radar_x[i] != -1 && radar_y[i] != -1 && dentro_mapa(radar_x[i], radar_y[i])) {
+                    pthread_mutex_lock(&mapa_simulacao.grade[radar_x[i]][radar_y[i]].mutex);
+                    if (mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia > 0) {
+                        mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia = 0;
+                    }
+                    pthread_mutex_unlock(&mapa_simulacao.grade[radar_x[i]][radar_y[i]].mutex);
+                    pthread_mutex_lock(&mutex_veiculos);
+                    overrides_ativos--;
+                    pthread_mutex_unlock(&mutex_veiculos);
+                }
+            }
+            pthread_mutex_lock(&mapa_simulacao.grade[self->x][self->y].mutex);
+            mapa_simulacao.grade[self->x][self->y].ocupada = 0;
+            mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+            mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
+            pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
+            pthread_mutex_lock(&mutex_veiculos);
+            veiculos_ativos--;
+            pthread_cond_signal(&cond_spawn);
+            pthread_mutex_unlock(&mutex_veiculos);
+            free(self);
+            pthread_exit(NULL);
+        }
+
+        pthread_mutex_lock(&mapa_simulacao.grade[self->x][self->y].mutex);
+        Direcao opcoes_direcao = mapa_simulacao.grade[self->x][self->y].direcao;
+        pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
+
+        if (opcoes_direcao == NENHUMA) {
+            for (int i = 0; i < 3; i++) {
+                if (radar_x[i] != -1 && radar_y[i] != -1 && dentro_mapa(radar_x[i], radar_y[i])) {
+                    pthread_mutex_lock(&mapa_simulacao.grade[radar_x[i]][radar_y[i]].mutex);
+                    if (mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia > 0) {
+                        mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia = 0;
+                    }
+                    pthread_mutex_unlock(&mapa_simulacao.grade[radar_x[i]][radar_y[i]].mutex);
+                    pthread_mutex_lock(&mutex_veiculos);
+                    overrides_ativos--;
+                    pthread_mutex_unlock(&mutex_veiculos);
+                }
+            }
+            pthread_mutex_lock(&mapa_simulacao.grade[self->x][self->y].mutex);
+            mapa_simulacao.grade[self->x][self->y].ocupada = 0;
+            mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+            mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
+            pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
+            pthread_mutex_lock(&mutex_veiculos);
+            veiculos_ativos--;
+            pthread_cond_signal(&cond_spawn);
+            pthread_mutex_unlock(&mutex_veiculos);
+            free(self);
+            pthread_exit(NULL);
+        }
+
+        Direcao dir_oposta = NENHUMA;
+        if (self->direcao_atual == CIMA) dir_oposta = BAIXO;
+        else if (self->direcao_atual == BAIXO) dir_oposta = CIMA;
+        else if (self->direcao_atual == ESQUERDA) dir_oposta = DIREITA;
+        else if (self->direcao_atual == DIREITA) dir_oposta = ESQUERDA;
+
+        Direcao vetor_opcoes[4];
+        int num_opcoes = 0;
+        Direcao direcoes_padrao[] = {CIMA, BAIXO, ESQUERDA, DIREITA};
+        for (int i = 0; i < 4; i++) {
+            Direcao d = direcoes_padrao[i];
+            if ((opcoes_direcao & d) && d != dir_oposta) vetor_opcoes[num_opcoes++] = d;
+        }
+        if (num_opcoes == 0 && (opcoes_direcao & dir_oposta)) vetor_opcoes[num_opcoes++] = dir_oposta;
+        if (num_opcoes == 0) continue;
+
+        Direcao dir_escolhida = vetor_opcoes[rand_safe() % num_opcoes];
+
+        int dest_x = self->x;
+        int dest_y = self->y;
+        if (dir_escolhida == CIMA) dest_x--;
+        else if (dir_escolhida == BAIXO) dest_x++;
+        else if (dir_escolhida == ESQUERDA) dest_y--;
+        else if (dir_escolhida == DIREITA) dest_y++;
+
+        int novos_radar_x[3] = {-1, -1, -1};
+        int novos_radar_y[3] = {-1, -1, -1};
+        int r_x = self->x;
+        int r_y = self->y;
+        for (int i = 0; i < 3; i++) {
+            if (dir_escolhida == CIMA) r_x--;
+            else if (dir_escolhida == BAIXO) r_x++;
+            else if (dir_escolhida == ESQUERDA) r_y--;
+            else if (dir_escolhida == DIREITA) r_y++;
+
+            if (dentro_mapa(r_x, r_y) && eh_via(mapa_simulacao.grade[r_x][r_y].tipo)) {
+                if (mapa_simulacao.grade[r_x][r_y].tipo == CRUZAMENTO) {
+                    novos_radar_x[i] = r_x;
+                    novos_radar_y[i] = r_y;
+                }
+            } else break;
+        }
+
+        for (int i = 0; i < 3; i++) {
+            if (novos_radar_x[i] != -1 && novos_radar_y[i] != -1) {
+                Celula* cel = &mapa_simulacao.grade[novos_radar_x[i]][novos_radar_y[i]];
+                int ja_estava = 0;
+                for (int j = 0; j < 3; j++) {
+                    if (radar_x[j] == novos_radar_x[i] && radar_y[j] == novos_radar_y[i]) {
+                        ja_estava = 1;
+                        radar_x[j] = -1;
+                        break;
+                    }
+                }
+
+                pthread_mutex_lock(&cel->mutex);
+                cel->override_emergencia = 1;
+                int eh_horizontal = (dir_escolhida == ESQUERDA || dir_escolhida == DIREITA);
+                if (eh_horizontal) {
+                    cel->sinal_horizontal = VERDE;
+                    cel->sinal_vertical = VERMELHO;
+                } else {
+                    cel->sinal_vertical = VERDE;
+                    cel->sinal_horizontal = VERMELHO;
+                }
+                pthread_cond_broadcast(&cel->cond_semaforo);
+                pthread_mutex_unlock(&cel->mutex);
+
+                if (!ja_estava) {
+                    pthread_mutex_lock(&mutex_veiculos);
+                    overrides_ativos++;
+                    pthread_mutex_unlock(&mutex_veiculos);
+                }
+            }
+        }
+
+        for (int j = 0; j < 3; j++) {
+            if (radar_x[j] != -1 && radar_y[j] != -1) {
+                Celula* cel = &mapa_simulacao.grade[radar_x[j]][radar_y[j]];
+                pthread_mutex_lock(&cel->mutex);
+                if (cel->override_emergencia > 0) cel->override_emergencia = 0;
+                pthread_mutex_unlock(&cel->mutex);
+
+                pthread_mutex_lock(&mutex_veiculos);
+                overrides_ativos--;
+                pthread_mutex_unlock(&mutex_veiculos);
+            }
+            radar_x[j] = novos_radar_x[j];
+            radar_y[j] = novos_radar_y[j];
+        }
+
+        if (dentro_mapa(dest_x, dest_y) && eh_via(mapa_simulacao.grade[dest_x][dest_y].tipo)) {
+            int movido = 0;
+            Celula* cel_destino = &mapa_simulacao.grade[dest_x][dest_y];
+
+            if (pthread_mutex_lock(&cel_destino->mutex) != 0) continue;
+
+            if (cel_destino->ocupada == 0) {
+                if (pthread_mutex_trylock(&mapa_simulacao.grade[self->x][self->y].mutex) == 0) {
+                    mapa_simulacao.grade[self->x][self->y].ocupada = 0;
+                    mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+                    mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
+                    pthread_mutex_unlock(&mapa_simulacao.grade[self->x][self->y].mutex);
+
+                    cel_destino->ocupada = 1;
+                    cel_destino->veiculo_id = self->id;
+                    cel_destino->tipo_veiculo_ocupante = 1;
+                    movido = 1;
+                }
+            }
+            pthread_mutex_unlock(&cel_destino->mutex);
+
+            if (movido) {
+                self->x = dest_x;
+                self->y = dest_y;
+                self->direcao_atual = dir_escolhida;
+                if (self->passos_restantes > 0) self->passos_restantes--;
+            }
+        }
+    }
     return NULL;
 }
