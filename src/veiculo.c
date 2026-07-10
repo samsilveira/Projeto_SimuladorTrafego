@@ -228,6 +228,7 @@ void* thread_veiculo(void* arg) {
             pthread_cond_signal(&cond_spawn);
             pthread_mutex_unlock(&mutex_veiculos);
 
+            log_event("Veiculo %d despawnou no ponto [%d, %d]", self->id, self->x, self->y);
             free(self);
             pthread_exit(NULL);
         }
@@ -250,6 +251,7 @@ void* thread_veiculo(void* arg) {
             pthread_cond_signal(&cond_spawn);
             pthread_mutex_unlock(&mutex_veiculos);
 
+            log_event("Veiculo %d despawnou de emergencia (preso) no ponto [%d, %d]", self->id, self->x, self->y);
             free(self);
             pthread_exit(NULL);
         }
@@ -347,6 +349,7 @@ void* thread_ambulancia(void* arg) {
         self->ticks_acumulados = 0;
 
         if (self->passos_restantes <= 0 && eh_ponto_despawn(self->x, self->y)) {
+            log_event("Ambulancia %d despawnou no ponto [%d, %d]", self->id, self->x, self->y);
             break;
         }
 
@@ -355,6 +358,7 @@ void* thread_ambulancia(void* arg) {
         liberar_celula(self->x, self->y);
 
         if (opcoes_direcao == NENHUMA) {
+            log_event("Ambulancia %d despawnou de emergencia (presa) no ponto [%d, %d]", self->id, self->x, self->y);
             break;
         }
 
@@ -442,6 +446,7 @@ void* thread_ambulancia(void* arg) {
                     pthread_mutex_lock(&mutex_veiculos);
                     overrides_ativos++;
                     pthread_mutex_unlock(&mutex_veiculos);
+                    log_event("Ambulancia %d ativou OVERRIDE no cruzamento [%d, %d]", self->id, novos_radar_x[i], novos_radar_y[i]);
                 }
             }
         }
