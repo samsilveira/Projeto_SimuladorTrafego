@@ -266,7 +266,7 @@ static char char_direcao(Direcao dir) {
 }
 
 void imprimir_mapa(int tick, int ativos, int meta, int overrides) {
-    clear();
+    erase();
 
     mvprintw(0, 0, "=== SIMULADOR DE TRAFEGO URBANO ===");
     mvprintw(1, 0, "Tick: %d | Veiculos Ativos: %d / %d", tick, ativos, meta);
