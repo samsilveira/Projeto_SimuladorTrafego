@@ -324,6 +324,7 @@ void* thread_veiculo(void* arg) {
         }
     }
 
+    free(self);
     return NULL;
 }
 
