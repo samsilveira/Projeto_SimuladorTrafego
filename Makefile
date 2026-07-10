@@ -1,7 +1,14 @@
 CC = gcc
 CFLAGS = -Wall -I./include -pthread
-# ncurses será necessária a partir da Issue 8; linkamos apenas pthread por enquanto
-LDFLAGS = -pthread -lncurses
+LDFLAGS = -pthread
+
+ifeq ($(OS),Windows_NT)
+    CFLAGS += -IC:/msys64/ucrt64/include/ncursesw
+    LDFLAGS += -lncursesw
+else
+    CFLAGS += $(shell pkg-config --cflags ncurses || pkg-config --cflags ncursesw)
+    LDFLAGS += $(shell pkg-config --libs ncurses || pkg-config --libs ncursesw)
+endif
 
 SRC_DIR = src
 OBJ_DIR = obj

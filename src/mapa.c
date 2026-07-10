@@ -210,33 +210,7 @@ static void remover_direcoes_invalidas(void) {
     }
 }
 
-static char simbolo_rua(Direcao direcao) {
-    int mascara = direcao;
 
-    if (mascara == CIMA) {
-        return '^';
-    }
-    if (mascara == BAIXO) {
-        return 'v';
-    }
-    if (mascara == DIREITA) {
-        return '>';
-    }
-    if (mascara == ESQUERDA) {
-        return '<';
-    }
-    if (mascara == (CIMA | BAIXO)) {
-        return '|';
-    }
-    if (mascara == (ESQUERDA | DIREITA)) {
-        return '-';
-    }
-    if (mascara == NENHUMA) {
-        return '#';
-    }
-
-    return '+';
-}
 
 void inicializar_mapa(void) {
     inicializar_mutexes_mapa();
@@ -295,6 +269,11 @@ void imprimir_mapa(int tick, int ativos, int meta) {
     
     mvprintw(0, 0, "=== SIMULADOR DE TRAFEGO URBANO ===");
     mvprintw(1, 0, "Tick: %d | Veiculos Ativos: %d / %d", tick, ativos, meta);
+    if (overrides_ativos > 0) {
+        attron(COLOR_PAIR(COR_AMB));
+        mvprintw(1, 45, "!!! EMERGENCIA ATIVA: Sinais Liberados !!!");
+        attroff(COLOR_PAIR(COR_AMB));
+    }
     mvprintw(2, 0, "Legenda: [=] Rua  [+] Cruzamento  [^v<>] Carros  [A] Ambulancia");
 
     for (int i = 0; i < LINHAS; i++) {
@@ -305,13 +284,7 @@ void imprimir_mapa(int tick, int ativos, int meta) {
 
             Direcao dir_v = mapa_simulacao.grade[i][j].direcao_veiculo;
             int amb = mapa_simulacao.grade[i][j].eh_ambulancia;
-            Direcao direcao = mapa_simulacao.grade[i][j].direcao;
             int tipo_ocupante = mapa_simulacao.grade[i][j].tipo_veiculo_ocupante;
-            int em_override = mapa_simulacao.grade[i][j].override_emergencia;
-            
-            // lê cores atuais do semáforo para colorir
-            Cores sinal_h = mapa_simulacao.grade[i][j].sinal_horizontal;
-            Cores sinal_v = mapa_simulacao.grade[i][j].sinal_vertical;
             liberar_celula(i, j);
             int py = i + 4; 
             int px = j * 3; 
@@ -334,6 +307,7 @@ void imprimir_mapa(int tick, int ativos, int meta) {
                     attron(COLOR_PAIR(COR_CRUZ));
                     mvprintw(py, px, " + ");
                     attroff(COLOR_PAIR(COR_CRUZ));
+                }
             }
         }
     }

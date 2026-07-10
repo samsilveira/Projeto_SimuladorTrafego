@@ -46,12 +46,23 @@ static void encerrar_simulacao(void) {
     }
 }
 
+#ifdef _WIN32
 static void tratador_sinal(int sig) {
     if (sig == SIGINT || sig == SIGTERM) {
-        printf("\n[SINAL] Sinal (%d) recebido. Encerrando o simulador de forma limpa...\n", sig);
         encerrar_simulacao();
     }
 }
+#else
+static void* thread_sinais(void* arg) {
+    sigset_t *sinais = (sigset_t*)arg;
+    int sinal_recebido;
+
+    if (sigwait(sinais, &sinal_recebido) == 0) {
+        encerrar_simulacao();
+    }
+    return NULL;
+}
+#endif
 
 void print_help(const char *prog_name) {
     printf("Uso: %s -v <veiculos> -t <tick_ms> [-m <mapa.txt>]\n", prog_name);
@@ -154,6 +165,10 @@ int main(int argc, char *argv[]) {
     Config cfg = {0};
     int opt;
 
+#ifndef _WIN32
+    sigset_t sinais;
+#endif
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_help(argv[0]);
@@ -181,8 +196,15 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+#ifdef _WIN32
     signal(SIGINT, tratador_sinal);
     signal(SIGTERM, tratador_sinal);
+#else
+    sigemptyset(&sinais);
+    sigaddset(&sinais, SIGINT);
+    sigaddset(&sinais, SIGTERM);
+    pthread_sigmask(SIG_BLOCK, &sinais, NULL);
+#endif
 
     // Inicializa o mapa da simulação
     inicializar_mapa();
@@ -199,6 +221,7 @@ int main(int argc, char *argv[]) {
     log_event("Simulacao iniciada. Meta: %d veiculos", cfg.num_veiculos);
 
     initscr();
+    cbreak();
     noecho();
     curs_set(0);
     start_color();
@@ -206,6 +229,15 @@ int main(int argc, char *argv[]) {
     init_pair(2, COLOR_CYAN, COLOR_BLACK);
     init_pair(3, COLOR_RED, COLOR_BLACK);
     init_pair(4, COLOR_YELLOW, COLOR_BLACK);
+
+#ifndef _WIN32
+    // === CRIAÇÃO DA THREAD DE SINAIS (Apenas POSIX) ===
+    pthread_t thread_sinais_id;
+    if (pthread_create(&thread_sinais_id, NULL, thread_sinais, (void*)&sinais) != 0) {
+        fprintf(stderr, "Erro ao criar thread de sinais.\n");
+        return EXIT_FAILURE;
+    }
+#endif
 
     // Cria a thread gerenciadora de spawn
     pthread_t thread_spawn_id;
@@ -221,10 +253,23 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Mantém a main rodando até o usuário encerrar ou a simulação parar
-    // Para simplificar, a main pode esperar as threads terminarem (o que não acontece na execução contínua)
+    // Mantém a main checando o teclado (encerra com 'q' ou Ctrl+C)
+    nodelay(stdscr, TRUE);
+    while (simulacao_esta_rodando()) {
+        int ch = getch();
+        if (ch == 'q' || ch == 'Q' || ch == 3) { // 3 é o código ASCII para Ctrl+C
+            encerrar_simulacao();
+            break;
+        }
+        usleep(100 * 1000); // Aguarda 100ms
+    }
+
+    // Aguarda o encerramento limpo das threads
     pthread_join(thread_relogio_id, NULL);
     pthread_join(thread_spawn_id, NULL);
+#ifndef _WIN32
+    pthread_join(thread_sinais_id, NULL);
+#endif
     destruir_mutexes_mapa();
 
     endwin();
