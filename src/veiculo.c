@@ -340,9 +340,10 @@ void* thread_ambulancia(void* arg) {
         while (tick_atual == tick_esperado && simulacao_rodando) {
             pthread_cond_wait(&cond_relogio, &mutex_relogio);
         }
+        int rodando = simulacao_rodando;
         pthread_mutex_unlock(&mutex_relogio);
 
-        if (!simulacao_rodando) break;
+        if (!rodando) break;
 
         self->ticks_acumulados++;
         if (self->ticks_acumulados < (int)self->velocidade) continue;
