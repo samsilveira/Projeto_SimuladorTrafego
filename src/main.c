@@ -75,12 +75,13 @@ void* thread_relogio(void* arg) {
         int tick = tick_atual;
         pthread_mutex_unlock(&mutex_relogio);
 
-        // Esta trava pertence ao sistema de spawn (outra task), mantemos como está
+        // Acesso protegido às variáveis globais
         pthread_mutex_lock(&mutex_veiculos);
         int ativos = veiculos_ativos;
+        int overrides_print = overrides_ativos; // Leitura protegida evitando data race
         pthread_mutex_unlock(&mutex_veiculos);
 
-        if (overrides_ativos > 0) {
+        if (overrides_print > 0) {
             printf("Tick: %d | Veiculos Ativos: %d / %d | \033[31m* OVERRIDE DE EMERGENCIA ATIVO *\033[0m\n", tick, ativos, num_veiculos_meta);
         } else {
             printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick, ativos, num_veiculos_meta);
