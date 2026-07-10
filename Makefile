@@ -6,8 +6,8 @@ ifeq ($(OS),Windows_NT)
     CFLAGS += -IC:/msys64/ucrt64/include/ncursesw
     LDFLAGS += -lncursesw
 else
-    CFLAGS += $(shell pkg-config --cflags ncurses || pkg-config --cflags ncursesw)
-    LDFLAGS += $(shell pkg-config --libs ncurses || pkg-config --libs ncursesw)
+    CFLAGS += $(shell pkg-config --cflags ncurses 2>/dev/null || pkg-config --cflags ncursesw 2>/dev/null || echo "")
+    LDFLAGS += $(shell pkg-config --libs ncurses 2>/dev/null || pkg-config --libs ncursesw 2>/dev/null || echo "-lncurses")
 endif
 
 SRC_DIR = src
