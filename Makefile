@@ -33,7 +33,12 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
 
-run: $(TARGET)
+run: run100
+
+run100: $(TARGET)
 	./$(TARGET) -v 16 -t 100
 
-.PHONY: all clean run
+run500: $(TARGET)
+	./$(TARGET) -v 16 -t 500
+
+.PHONY: all clean run run100 run500

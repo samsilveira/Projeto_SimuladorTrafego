@@ -36,10 +36,10 @@ Este projeto consiste em uma simulação concorrente de tráfego urbano desenvol
 A simulação conta com uma interface dinâmica no terminal atualizada a cada tick. 
 
 **Legenda Visual:**
-- ` = ` : Ruas e vias da malha.
-- ` + ` : Cruzamentos (protegidos por mutex e variáveis de condição).
-- `^ v < >` : Veículos comuns (a seta indica a direção do movimento).
-- ` A ` : Ambulância em trânsito (destaque em vermelho).
+- ` . ` : Ruas e vias da malha.
+- ` | ` / ` - ` : Semáforos verdes abertos para a direção correspondente.
+- `^ v < >` : Veículos comuns em movimento.
+- `[A]` : Ambulância em trânsito (destaque em vermelho e imune aos semáforos).
 
 **Sistema de Logs:** Durante a execução, a engine gera automaticamente um arquivo `debug.log` na raiz do projeto, registrando o ciclo de vida dos veículos (spawn/despawn) e eventos de emergência em tempo real.
 
@@ -59,13 +59,19 @@ Para compilar e testar o simulador rapidamente, você pode usar as opções conf
 
 ### Comandos Rápidos
 
-- **Compilar e executar com valores padrão (recomendado para testes):**
+- **Compilar e executar (Padrão rápido - 100ms):**
 
   ```bash
   make run
+  # ou
+  make run100
   ```
 
-  *(Isso compilará o projeto e iniciará a simulação com 10 veículos e 100ms de tick).*
+- **Compilar e executar (Lento/Observação - 500ms):**
+
+  ```bash
+  make run500
+  ```
 
 - **Apenas compilar:**
 
