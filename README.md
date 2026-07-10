@@ -6,15 +6,15 @@ Este projeto consiste em uma simulação concorrente de tráfego urbano desenvol
 
 ## Integrantes
 
-| Nome | GitHub |
-| --- | --- |
-| Elder Rayan Oliveira Silva | @eldrayan |
-| Espedito Ramom Mascena Ricarto | @RamomRicarto |
-| Manoel Junio Duarte da Silva | @Junio404 |
-| Pedro Yan Alcantara Palácio | @pedropalacioo |
-| Sabrina Alencar Soares | @sabrinaalencar |
-| Samuel Wagner Tiburi Silveira | @samsilveira |
-| Sebastião Sousa Soares | @SebastiaoSoares |
+| Nome | GitHub | Contribuições Resumidas |
+| --- | --- | --- |
+| Elder Rayan Oliveira Silva | @eldrayan | Malha viária base, threads veiculares iniciais e base do relatório de arquitetura. |
+| Espedito Ramom Mascena Ricarto | @RamomRicarto | Sistema de relógio global discreto e lógica de espera síncrona (variáveis de condição). |
+| Manoel Junio Duarte da Silva | @Junio404 | Refatoração estrutural (structs/enums) e movimentação com prevenção de *deadlock*. |
+| Pedro Yan Alcantara Palácio | @pedropalacioo | Arquitetura técnica e análise dos *Locks Finos* (mutexes por célula) para máxima concorrência. |
+| Sabrina Alencar Soares | @sabrinaalencar | Interface gráfica fluida (ncurses), módulo de logs *thread-safe* e TUI da ambulância. |
+| Samuel Wagner Tiburi Silveira | @samsilveira | Ambulância (*Radar Look-ahead*), *Resource Ordering* anti-deadlock, Makefile e correção de *data races*. |
+| Sebastião Sousa Soares | @SebastiaoSoares | Lógica de semáforos, sincronização em cruzamentos e proteção ao acesso de variáveis globais. |
 
 ## Tecnologias e Mecanismos
 
