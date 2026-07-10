@@ -33,13 +33,17 @@ typedef struct Celula {
     Cores sinal_horizontal; // sinal esquerda ou direita
     Cores sinal_vertical; // sinal cima ou baixo
     pthread_cond_t cond_semaforo; // condicao de parada
+
+    // características de emergência (ambulância)
+    int override_emergencia; // 1 se ambulância estiver próxima
+    int tipo_veiculo_ocupante; // 0 = CARRO, 1 = AMBULANCIA
 } Celula;
 
 typedef struct Mapa {
     Celula grade[LINHAS][COLUNAS];
 } Mapa;
 
-// Instância global do mapa (a ser definida no .c correspondente)
+// Instância global do mapa
 extern Mapa mapa_simulacao;
 extern pthread_mutex_t mutex_celulas[LINHAS][COLUNAS];
 
@@ -47,6 +51,7 @@ extern pthread_mutex_t mutex_celulas[LINHAS][COLUNAS];
 extern pthread_mutex_t mutex_relogio;
 extern pthread_cond_t cond_relogio;
 extern int tick_atual;
+extern int overrides_ativos; // Indicador global de emergência
 
 // Variáveis globais para controle de ciclo de vida dos veículos
 extern int veiculos_ativos;

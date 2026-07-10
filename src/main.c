@@ -13,6 +13,7 @@
 pthread_mutex_t mutex_relogio = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_relogio = PTHREAD_COND_INITIALIZER;
 int tick_atual = 0;
+int overrides_ativos = 0;
 int simulacao_rodando = 1;
 
 static int num_veiculos_meta = 0;
@@ -43,15 +44,11 @@ static void encerrar_simulacao(void) {
     }
 }
 
-static void* thread_sinais(void* arg) {
-    sigset_t *sinais = (sigset_t*)arg;
-    int sinal_recebido;
-
-    if (sigwait(sinais, &sinal_recebido) == 0) {
+static void tratador_sinal(int sig) {
+    if (sig == SIGINT || sig == SIGTERM) {
+        printf("\n[SINAL] Sinal (%d) recebido. Encerrando o simulador de forma limpa...\n", sig);
         encerrar_simulacao();
     }
-
-    return NULL;
 }
 
 void print_help(const char *prog_name) {
@@ -78,12 +75,17 @@ void* thread_relogio(void* arg) {
         int tick = tick_atual;
         pthread_mutex_unlock(&mutex_relogio);
 
-        // Esta trava pertence ao sistema de spawn (outra task), mantemos como está
+        // Acesso protegido às variáveis globais
         pthread_mutex_lock(&mutex_veiculos);
         int ativos = veiculos_ativos;
+        int overrides_print = overrides_ativos; // Leitura protegida evitando data race
         pthread_mutex_unlock(&mutex_veiculos);
 
-        printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick, ativos, num_veiculos_meta);
+        if (overrides_print > 0) {
+            printf("Tick: %d | Veiculos Ativos: %d / %d | \033[31m* OVERRIDE DE EMERGENCIA ATIVO *\033[0m\n", tick, ativos, num_veiculos_meta);
+        } else {
+            printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick, ativos, num_veiculos_meta);
+        }
 
         imprimir_mapa();
         fflush(stdout);
@@ -103,15 +105,17 @@ void* thread_relogio(void* arg) {
 
                     // só influencia nos semáforos inseridos nos CRUZAMENTOS
                     if (mapa_simulacao.grade[i][j].tipo == CRUZAMENTO) {
-                        if (mapa_simulacao.grade[i][j].sinal_horizontal == VERDE) {
-                            mapa_simulacao.grade[i][j].sinal_horizontal = VERMELHO;
-                            mapa_simulacao.grade[i][j].sinal_vertical = VERDE;
-                        } else {
-                            mapa_simulacao.grade[i][j].sinal_vertical = VERMELHO;
-                            mapa_simulacao.grade[i][j].sinal_horizontal = VERDE;
+                        if (mapa_simulacao.grade[i][j].override_emergencia == 0) {
+                            if (mapa_simulacao.grade[i][j].sinal_horizontal == VERDE) {
+                                mapa_simulacao.grade[i][j].sinal_horizontal = VERMELHO;
+                                mapa_simulacao.grade[i][j].sinal_vertical = VERDE;
+                            } else {
+                                mapa_simulacao.grade[i][j].sinal_vertical = VERMELHO;
+                                mapa_simulacao.grade[i][j].sinal_horizontal = VERDE;
+                            }
+                            pthread_cond_broadcast(&mapa_simulacao.grade[i][j].cond_semaforo);
                         }
 
-                        pthread_cond_broadcast(&mapa_simulacao.grade[i][j].cond_semaforo);
                     }
 
                     liberar_celula(i, j);
@@ -158,7 +162,6 @@ void* thread_gerenciadora_spawn(void* arg) {
 int main(int argc, char *argv[]) {
     Config cfg = {0};
     int opt;
-    sigset_t sinais;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
@@ -187,10 +190,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    sigemptyset(&sinais);
-    sigaddset(&sinais, SIGINT);
-    sigaddset(&sinais, SIGTERM);
-    pthread_sigmask(SIG_BLOCK, &sinais, NULL);
+    signal(SIGINT, tratador_sinal);
+    signal(SIGTERM, tratador_sinal);
 
     // Inicializa o mapa da simulação
     inicializar_mapa();
@@ -202,11 +203,7 @@ int main(int argc, char *argv[]) {
     // Semente do gerador aleatório
     srand(time(NULL));
 
-    pthread_t thread_sinais_id;
-    if (pthread_create(&thread_sinais_id, NULL, thread_sinais, (void*)&sinais) != 0) {
-        fprintf(stderr, "Erro ao criar thread de sinais.\n");
-        return EXIT_FAILURE;
-    }
+
 
     // Cria a thread gerenciadora de spawn
     pthread_t thread_spawn_id;
@@ -226,7 +223,6 @@ int main(int argc, char *argv[]) {
     // Para simplificar, a main pode esperar as threads terminarem (o que não acontece na execução contínua)
     pthread_join(thread_relogio_id, NULL);
     pthread_join(thread_spawn_id, NULL);
-    pthread_join(thread_sinais_id, NULL);
     destruir_mutexes_mapa();
 
     return EXIT_SUCCESS;

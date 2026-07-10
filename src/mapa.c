@@ -111,11 +111,15 @@ int mover_veiculo_celula(int origem_i, int origem_j, int destino_i, int destino_
         (origem->tipo == CRUZAMENTO ||
          destino->tipo != CRUZAMENTO ||
          sinal_permite_movimento(destino, direcao_movimento))) {
-        origem->ocupada = 0;
-        origem->veiculo_id = 0;
-
+        
         destino->ocupada = 1;
         destino->veiculo_id = veiculo_id;
+        destino->tipo_veiculo_ocupante = origem->tipo_veiculo_ocupante;
+
+        origem->ocupada = 0;
+        origem->veiculo_id = 0;
+        origem->tipo_veiculo_ocupante = 0;
+        
         movido = 1;
     }
 
@@ -248,6 +252,8 @@ void inicializar_mapa(void) {
             pthread_cond_init(&mapa_simulacao.grade[i][j].cond_semaforo, NULL);
             mapa_simulacao.grade[i][j].sinal_horizontal = VERDE;
             mapa_simulacao.grade[i][j].sinal_vertical = VERMELHO;
+            mapa_simulacao.grade[i][j].override_emergencia = 0;
+            mapa_simulacao.grade[i][j].tipo_veiculo_ocupante = 0; // 0 para CARRO
         }
     }
 
@@ -278,19 +284,44 @@ void imprimir_mapa(void) {
             int veiculo_id = mapa_simulacao.grade[i][j].veiculo_id;
             TipoCelula tipo = mapa_simulacao.grade[i][j].tipo;
             Direcao direcao = mapa_simulacao.grade[i][j].direcao;
+            int tipo_ocupante = mapa_simulacao.grade[i][j].tipo_veiculo_ocupante;
+            int em_override = mapa_simulacao.grade[i][j].override_emergencia;
+            
+            // lê cores atuais do semáforo para colorir
+            Cores sinal_h = mapa_simulacao.grade[i][j].sinal_horizontal;
+            Cores sinal_v = mapa_simulacao.grade[i][j].sinal_vertical;
             liberar_celula(i, j);
-
+            
             if (ocupada) {
-                printf("%2d ", veiculo_id);
+                if (tipo_ocupante == 1) { // 1 = AMBULANCIA
+                    printf("\033[31m A \033[0m");
+                } else {
+                    printf("%2d ", veiculo_id);
+                }
             } else {
                 char c;
                 switch (tipo) {
                     case CALCADA: c = '.'; break;
                     case RUA: c = simbolo_rua(direcao); break;
-                    case CRUZAMENTO: c = 'X'; break;
+                    case CRUZAMENTO: c = em_override ? 'E' : 'X'; break;
                     default: c = '?'; break;
                 }
-                printf(" %c ", c);
+                
+                if (em_override && tipo == CRUZAMENTO) {
+                    printf("\033[31m %c \033[0m", c);
+                } else if (tipo == CRUZAMENTO) {
+                    if (sinal_h == VERDE) {
+                        printf(" \033[32m-\033[0m ");
+                    } else if (sinal_v == VERDE) {
+                        printf(" \033[32m|\033[0m ");
+                    } else {
+                        printf(" \033[31mX\033[0m ");
+                    }
+                } else if (tipo == CALCADA) {
+                    printf("\033[48;5;235m   \033[0m");
+                } else {
+                    printf(" %c ", c);
+                }
             }
         }
         printf("\n");

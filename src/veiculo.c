@@ -6,6 +6,7 @@
 
 // Variáveis globais para controle de ciclo de vida dos veículos (mantidas da sua equipe)
 int veiculos_ativos = 0;
+int ambulancias_ativas = 0;
 pthread_mutex_t mutex_veiculos = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_spawn = PTHREAD_COND_INITIALIZER;
 
@@ -134,26 +135,41 @@ int tentar_spawn_veiculo(void) {
                 v->y = sy;
                 v->direcao_atual = pontos_spawn[idx].direcao_inicial;
 
-                // Distribuição de velocidades
-                int r_vel = rand_safe() % 3;
-                if (r_vel == 0) v->velocidade = RAPIDO;
-                else if (r_vel == 1) v->velocidade = MEDIO;
-                else v->velocidade = LENTO;
+                // Chance de 10% de ser ambulância, ou 100% caso não exista nenhuma ativa
+                int r_tipo = rand_safe() % 100;
 
-                v->tipo = CARRO;
+                int num_amb = ambulancias_ativas;
+
+                if (num_amb == 0 || r_tipo < 10) {
+                    v->tipo = AMBULANCIA;
+                    v->velocidade = RAPIDO;
+                    ambulancias_ativas++;
+                } else {
+                    v->tipo = CARRO;
+                    // Distribuição de velocidades
+                    int r_vel = rand_safe() % 3;
+                    if (r_vel == 0) v->velocidade = RAPIDO;
+                    else if (r_vel == 1) v->velocidade = MEDIO;
+                    else v->velocidade = LENTO;
+                }
+
                 v->ticks_acumulados = 0;
                 v->passos_restantes = 25 + rand_safe() % 35; // Entre 25 e 60 passos de vida
 
                 mapa_simulacao.grade[sx][sy].ocupada = 1;
                 mapa_simulacao.grade[sx][sy].veiculo_id = v->id;
+                mapa_simulacao.grade[sx][sy].tipo_veiculo_ocupante = (v->tipo == AMBULANCIA) ? 1 : 0;
 
                 liberar_celula(sx, sy);
 
                 pthread_t t;
-                if (pthread_create(&t, NULL, thread_veiculo, (void*)v) != 0) {
+                void* (*funcao_thread)(void*) = (v->tipo == AMBULANCIA) ? thread_ambulancia : thread_veiculo;
+
+                if (pthread_create(&t, NULL, funcao_thread, (void*)v) != 0) {
                     travar_celula(sx, sy);
                     mapa_simulacao.grade[sx][sy].ocupada = 0;
                     mapa_simulacao.grade[sx][sy].veiculo_id = 0;
+                    mapa_simulacao.grade[sx][sy].tipo_veiculo_ocupante = 0;
                     liberar_celula(sx, sy);
                     free(v);
                     return -1;
@@ -172,7 +188,7 @@ void* thread_veiculo(void* arg) {
     pthread_detach(pthread_self());
 
     while (1) {
-        // === INÍCIO DA ESPERA SÍNCRONA (Sua Task) ===
+        // === INÍCIO DA ESPERA SÍNCRONA ===
         pthread_mutex_lock(&mutex_relogio);
         int tick_esperado = tick_atual; // Salva o tick atual antes de dormir
 
@@ -200,6 +216,7 @@ void* thread_veiculo(void* arg) {
             travar_celula(self->x, self->y);
             mapa_simulacao.grade[self->x][self->y].ocupada = 0;
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+            mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
             liberar_celula(self->x, self->y);
 
             pthread_mutex_lock(&mutex_veiculos);
@@ -221,6 +238,7 @@ void* thread_veiculo(void* arg) {
             travar_celula(self->x, self->y);
             mapa_simulacao.grade[self->x][self->y].ocupada = 0;
             mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+            mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
             liberar_celula(self->x, self->y);
 
             pthread_mutex_lock(&mutex_veiculos);
@@ -260,7 +278,12 @@ void* thread_veiculo(void* arg) {
         }
 
         // Sorteia direção no cruzamento/via
-        Direcao dir_escolhida = vetor_opcoes[rand_safe() % num_opcoes];
+        Direcao dir_escolhida;
+        if (num_opcoes > 1) {
+            dir_escolhida = vetor_opcoes[(rand_safe() >> 8) % num_opcoes];
+        } else {
+            dir_escolhida = vetor_opcoes[0];
+        }
 
         int dest_x = self->x;
         int dest_y = self->y;
@@ -276,7 +299,6 @@ void* thread_veiculo(void* arg) {
 
             int movido = mover_veiculo_celula(self->x, self->y, dest_x, dest_y,
                                               self->id, dir_escolhida);
-
             if (movido == 1) {
                 self->x = dest_x;
                 self->y = dest_y;
@@ -288,5 +310,188 @@ void* thread_veiculo(void* arg) {
         }
     }
 
+    return NULL;
+}
+
+void* thread_ambulancia(void* arg) {
+    Veiculo* self = (Veiculo*)arg;
+    pthread_detach(pthread_self());
+
+    int radar_x[4] = {-1, -1, -1, -1};
+    int radar_y[4] = {-1, -1, -1, -1};
+
+    while (1) {
+        pthread_mutex_lock(&mutex_relogio);
+        int tick_esperado = tick_atual;
+        while (tick_atual == tick_esperado && simulacao_rodando) {
+            pthread_cond_wait(&cond_relogio, &mutex_relogio);
+        }
+        pthread_mutex_unlock(&mutex_relogio);
+
+        if (!simulacao_rodando) break;
+
+        self->ticks_acumulados++;
+        if (self->ticks_acumulados < (int)self->velocidade) continue;
+        self->ticks_acumulados = 0;
+
+        if (self->passos_restantes <= 0 && eh_ponto_despawn(self->x, self->y)) {
+            break;
+        }
+
+        travar_celula(self->x, self->y);
+        Direcao opcoes_direcao = mapa_simulacao.grade[self->x][self->y].direcao;
+        liberar_celula(self->x, self->y);
+
+        if (opcoes_direcao == NENHUMA) {
+            break;
+        }
+
+        Direcao dir_oposta = NENHUMA;
+        if (self->direcao_atual == CIMA) dir_oposta = BAIXO;
+        else if (self->direcao_atual == BAIXO) dir_oposta = CIMA;
+        else if (self->direcao_atual == ESQUERDA) dir_oposta = DIREITA;
+        else if (self->direcao_atual == DIREITA) dir_oposta = ESQUERDA;
+
+        Direcao vetor_opcoes[4];
+        int num_opcoes = 0;
+        Direcao direcoes_padrao[] = {CIMA, BAIXO, ESQUERDA, DIREITA};
+        for (int i = 0; i < 4; i++) {
+            Direcao d = direcoes_padrao[i];
+            if ((opcoes_direcao & d) && d != dir_oposta) vetor_opcoes[num_opcoes++] = d;
+        }
+        if (num_opcoes == 0 && (opcoes_direcao & dir_oposta)) vetor_opcoes[num_opcoes++] = dir_oposta;
+        if (num_opcoes == 0) continue;
+
+        Direcao dir_escolhida;
+        if (num_opcoes > 1) {
+            dir_escolhida = vetor_opcoes[(rand_safe() >> 8) % num_opcoes];
+        } else if (num_opcoes == 1) {
+            dir_escolhida = vetor_opcoes[0];
+        } else {
+            dir_escolhida = self->direcao_atual;
+        }
+
+        int dest_x = self->x;
+        int dest_y = self->y;
+        if (dir_escolhida == CIMA) dest_x--;
+        else if (dir_escolhida == BAIXO) dest_x++;
+        else if (dir_escolhida == ESQUERDA) dest_y--;
+        else if (dir_escolhida == DIREITA) dest_y++;
+
+        int novos_radar_x[4] = {-1, -1, -1, -1};
+        int novos_radar_y[4] = {-1, -1, -1, -1};
+        int r_x = self->x;
+        int r_y = self->y;
+        
+        for (int i = 0; i < 4; i++) {
+            // Correção: Primeiro processa a célula atual da varredura
+            if (dentro_mapa(r_x, r_y) && eh_via(mapa_simulacao.grade[r_x][r_y].tipo)) {
+                if (mapa_simulacao.grade[r_x][r_y].tipo == CRUZAMENTO) {
+                    novos_radar_x[i] = r_x;
+                    novos_radar_y[i] = r_y;
+                }
+            } else break;
+
+            // Depois avança a projeção para a próxima célula
+            if (dir_escolhida == CIMA) r_x--;
+            else if (dir_escolhida == BAIXO) r_x++;
+            else if (dir_escolhida == ESQUERDA) r_y--;
+            else if (dir_escolhida == DIREITA) r_y++;
+        }
+
+        for (int i = 0; i < 4; i++) {
+            if (novos_radar_x[i] != -1 && novos_radar_y[i] != -1) {
+                int ja_estava = 0;
+                for (int j = 0; j < 4; j++) {
+                    if (radar_x[j] == novos_radar_x[i] && radar_y[j] == novos_radar_y[i]) {
+                        ja_estava = 1;
+                        radar_x[j] = -1;
+                        break;
+                    }
+                }
+
+                travar_celula(novos_radar_x[i], novos_radar_y[i]);
+                Celula* cel = &mapa_simulacao.grade[novos_radar_x[i]][novos_radar_y[i]];
+                if (!ja_estava) {
+                    cel->override_emergencia++;
+                }
+                int eh_horizontal = (dir_escolhida == ESQUERDA || dir_escolhida == DIREITA);
+                if (eh_horizontal) {
+                    cel->sinal_horizontal = VERDE;
+                    cel->sinal_vertical = VERMELHO;
+                } else {
+                    cel->sinal_vertical = VERDE;
+                    cel->sinal_horizontal = VERMELHO;
+                }
+                pthread_cond_broadcast(&cel->cond_semaforo);
+                liberar_celula(novos_radar_x[i], novos_radar_y[i]);
+
+                if (!ja_estava) {
+                    pthread_mutex_lock(&mutex_veiculos);
+                    overrides_ativos++;
+                    pthread_mutex_unlock(&mutex_veiculos);
+                }
+            }
+        }
+
+        for (int j = 0; j < 4; j++) {
+            if (radar_x[j] != -1 && radar_y[j] != -1) {
+                travar_celula(radar_x[j], radar_y[j]);
+                Celula* cel = &mapa_simulacao.grade[radar_x[j]][radar_y[j]];
+                if (cel->override_emergencia > 0) cel->override_emergencia--;
+                liberar_celula(radar_x[j], radar_y[j]);
+
+                pthread_mutex_lock(&mutex_veiculos);
+                overrides_ativos--;
+                pthread_mutex_unlock(&mutex_veiculos);
+            }
+            radar_x[j] = novos_radar_x[j];
+            radar_y[j] = novos_radar_y[j];
+        }
+
+        if (dentro_mapa(dest_x, dest_y)) {
+            int movido = mover_veiculo_celula(self->x, self->y, dest_x, dest_y, self->id, dir_escolhida);
+
+            if (movido) {
+                self->x = dest_x;
+                self->y = dest_y;
+                self->direcao_atual = dir_escolhida;
+                if (self->passos_restantes > 0) self->passos_restantes--;
+            }
+        }
+    }
+
+    // Limpa os cruzamentos que estavam no radar
+    for (int i = 0; i < 4; i++) {
+        if (radar_x[i] != -1 && radar_y[i] != -1 && dentro_mapa(radar_x[i], radar_y[i])) {
+            travar_celula(radar_x[i], radar_y[i]);
+            if (mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia > 0) {
+                mapa_simulacao.grade[radar_x[i]][radar_y[i]].override_emergencia--;
+            }
+            liberar_celula(radar_x[i], radar_y[i]);
+
+            pthread_mutex_lock(&mutex_veiculos);
+            overrides_ativos--;
+            pthread_mutex_unlock(&mutex_veiculos);
+        }
+    }
+
+    // Remove o veículo da grade
+    if (dentro_mapa(self->x, self->y)) {
+        travar_celula(self->x, self->y);
+        mapa_simulacao.grade[self->x][self->y].ocupada = 0;
+        mapa_simulacao.grade[self->x][self->y].veiculo_id = 0;
+        mapa_simulacao.grade[self->x][self->y].tipo_veiculo_ocupante = 0;
+        liberar_celula(self->x, self->y);
+    }
+
+    // Informa a diminuição na contagem
+    pthread_mutex_lock(&mutex_veiculos);
+    ambulancias_ativas--;
+    veiculos_ativos--;
+    pthread_cond_signal(&cond_spawn);
+    pthread_mutex_unlock(&mutex_veiculos);
+
+    free(self);
     return NULL;
 }
