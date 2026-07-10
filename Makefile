@@ -27,6 +27,6 @@ clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
 
 run: $(TARGET)
-	./$(TARGET) -v 10 -t 100
+	./$(TARGET) -v 16 -t 100
 
 .PHONY: all clean run

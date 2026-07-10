@@ -112,11 +112,15 @@ int mover_veiculo_celula(int origem_i, int origem_j, int destino_i, int destino_
         (origem->tipo == CRUZAMENTO ||
          destino->tipo != CRUZAMENTO ||
          sinal_permite_movimento(destino, direcao_movimento))) {
-        origem->ocupada = 0;
-        origem->veiculo_id = 0;
-
+        
         destino->ocupada = 1;
         destino->veiculo_id = veiculo_id;
+        destino->tipo_veiculo_ocupante = origem->tipo_veiculo_ocupante;
+
+        origem->ocupada = 0;
+        origem->veiculo_id = 0;
+        origem->tipo_veiculo_ocupante = 0;
+        
         movido = 1;
     }
 
@@ -249,6 +253,8 @@ void inicializar_mapa(void) {
             pthread_cond_init(&mapa_simulacao.grade[i][j].cond_semaforo, NULL);
             mapa_simulacao.grade[i][j].sinal_horizontal = VERDE;
             mapa_simulacao.grade[i][j].sinal_vertical = VERMELHO;
+            mapa_simulacao.grade[i][j].override_emergencia = 0;
+            mapa_simulacao.grade[i][j].tipo_veiculo_ocupante = 0; // 0 para CARRO
         }
     }
 
@@ -300,13 +306,17 @@ void imprimir_mapa(int tick, int ativos, int meta) {
             Direcao dir_v = mapa_simulacao.grade[i][j].direcao_veiculo;
             int amb = mapa_simulacao.grade[i][j].eh_ambulancia;
             Direcao direcao = mapa_simulacao.grade[i][j].direcao;
+            int tipo_ocupante = mapa_simulacao.grade[i][j].tipo_veiculo_ocupante;
+            int em_override = mapa_simulacao.grade[i][j].override_emergencia;
+            
+            // lê cores atuais do semáforo para colorir
+            Cores sinal_h = mapa_simulacao.grade[i][j].sinal_horizontal;
+            Cores sinal_v = mapa_simulacao.grade[i][j].sinal_vertical;
             liberar_celula(i, j);
-
             int py = i + 4; 
             int px = j * 3; 
-
             if (ocupada) {
-                if (amb) {
+                if (amb || tipo_ocupante == 1) {
                     attron(COLOR_PAIR(COR_AMB));
                     mvprintw(py, px, " A ");
                     attroff(COLOR_PAIR(COR_AMB));
@@ -324,7 +334,6 @@ void imprimir_mapa(int tick, int ativos, int meta) {
                     attron(COLOR_PAIR(COR_CRUZ));
                     mvprintw(py, px, " + ");
                     attroff(COLOR_PAIR(COR_CRUZ));
-                }
             }
         }
     }
