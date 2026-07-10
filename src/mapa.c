@@ -264,12 +264,12 @@ static char char_direcao(Direcao dir) {
     return 'O';
 }
 
-void imprimir_mapa(int tick, int ativos, int meta) {
+void imprimir_mapa(int tick, int ativos, int meta, int overrides) {
     clear(); 
     
     mvprintw(0, 0, "=== SIMULADOR DE TRAFEGO URBANO ===");
     mvprintw(1, 0, "Tick: %d | Veiculos Ativos: %d / %d", tick, ativos, meta);
-    if (overrides_ativos > 0) {
+    if (overrides > 0) {
         attron(COLOR_PAIR(COR_AMB));
         mvprintw(1, 45, "!!! EMERGENCIA ATIVA: Sinais Liberados !!!");
         attroff(COLOR_PAIR(COR_AMB));

@@ -87,10 +87,18 @@ void* thread_relogio(void* arg) {
         // Acesso protegido às variáveis globais
         pthread_mutex_lock(&mutex_veiculos);
         int ativos = veiculos_ativos;
+        int overrides = overrides_ativos;
         pthread_mutex_unlock(&mutex_veiculos);
 
         // Agora a ncurses cuida de toda a impressão limpa!
-        imprimir_mapa(tick, ativos, num_veiculos_meta);
+        imprimir_mapa(tick, ativos, num_veiculos_meta, overrides);
+
+        // Checa entrada do usuário
+        int ch = getch();
+        if (ch == 'q' || ch == 'Q' || ch == 3) {
+            encerrar_simulacao();
+            break;
+        }
 
         // Avança o relógio e acorda as threads de veículos
         pthread_mutex_lock(&mutex_relogio);
@@ -253,14 +261,11 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Mantém a main checando o teclado (encerra com 'q' ou Ctrl+C)
+    // Configura leitura não bloqueante e deixa a thread relógio cuidar do teclado
     nodelay(stdscr, TRUE);
+
+    // Mantém a main apenas aguardando a simulação terminar
     while (simulacao_esta_rodando()) {
-        int ch = getch();
-        if (ch == 'q' || ch == 'Q' || ch == 3) { // 3 é o código ASCII para Ctrl+C
-            encerrar_simulacao();
-            break;
-        }
         usleep(100 * 1000); // Aguarda 100ms
     }
 
