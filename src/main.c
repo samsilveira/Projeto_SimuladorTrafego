@@ -8,6 +8,8 @@
 #include "config.h"
 #include "globals.h"
 #include "veiculo.h"
+#include <ncurses.h>
+#include "logger.h"
 
 // === INICIALIZAÇÃO DAS VARIÁVEIS GLOBAIS DO RELÓGIO (Sua Task) ===
 pthread_mutex_t mutex_relogio = PTHREAD_MUTEX_INITIALIZER;
@@ -44,12 +46,23 @@ static void encerrar_simulacao(void) {
     }
 }
 
+#ifdef _WIN32
 static void tratador_sinal(int sig) {
     if (sig == SIGINT || sig == SIGTERM) {
-        printf("\n[SINAL] Sinal (%d) recebido. Encerrando o simulador de forma limpa...\n", sig);
         encerrar_simulacao();
     }
 }
+#else
+static void* thread_sinais(void* arg) {
+    sigset_t *sinais = (sigset_t*)arg;
+    int sinal_recebido;
+
+    if (sigwait(sinais, &sinal_recebido) == 0) {
+        encerrar_simulacao();
+    }
+    return NULL;
+}
+#endif
 
 void print_help(const char *prog_name) {
     printf("Uso: %s -v <veiculos> -t <tick_ms> [-m <mapa.txt>]\n", prog_name);
@@ -67,10 +80,6 @@ void* thread_relogio(void* arg) {
     while (simulacao_esta_rodando()) {
         usleep(tick_ms * 1000);
 
-        // Imprime o estado resultante no terminal (limpando a tela com ANSI escape code)
-        printf("\033[H\033[J");
-        printf("=== SIMULADOR DE TRAFEGO URBANO ===\n");
-
         pthread_mutex_lock(&mutex_relogio);
         int tick = tick_atual;
         pthread_mutex_unlock(&mutex_relogio);
@@ -78,17 +87,18 @@ void* thread_relogio(void* arg) {
         // Acesso protegido às variáveis globais
         pthread_mutex_lock(&mutex_veiculos);
         int ativos = veiculos_ativos;
-        int overrides_print = overrides_ativos; // Leitura protegida evitando data race
+        int overrides = overrides_ativos;
         pthread_mutex_unlock(&mutex_veiculos);
 
-        if (overrides_print > 0) {
-            printf("Tick: %d | Veiculos Ativos: %d / %d | \033[31m* OVERRIDE DE EMERGENCIA ATIVO *\033[0m\n", tick, ativos, num_veiculos_meta);
-        } else {
-            printf("Tick: %d | Veiculos Ativos: %d / %d\n", tick, ativos, num_veiculos_meta);
-        }
+        // Agora a ncurses cuida de toda a impressão limpa!
+        imprimir_mapa(tick, ativos, num_veiculos_meta, overrides);
 
-        imprimir_mapa();
-        fflush(stdout);
+        // Checa entrada do usuário
+        int ch = getch();
+        if (ch == 'q' || ch == 'Q' || ch == 3) {
+            encerrar_simulacao();
+            break;
+        }
 
         // Avança o relógio e acorda as threads de veículos
         pthread_mutex_lock(&mutex_relogio);
@@ -163,6 +173,10 @@ int main(int argc, char *argv[]) {
     Config cfg = {0};
     int opt;
 
+#ifndef _WIN32
+    sigset_t sinais;
+#endif
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_help(argv[0]);
@@ -190,8 +204,15 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+#ifdef _WIN32
     signal(SIGINT, tratador_sinal);
     signal(SIGTERM, tratador_sinal);
+#else
+    sigemptyset(&sinais);
+    sigaddset(&sinais, SIGINT);
+    sigaddset(&sinais, SIGTERM);
+    pthread_sigmask(SIG_BLOCK, &sinais, NULL);
+#endif
 
     // Inicializa o mapa da simulação
     inicializar_mapa();
@@ -203,7 +224,29 @@ int main(int argc, char *argv[]) {
     // Semente do gerador aleatório
     srand(time(NULL));
 
+    // === INICIALIZAÇÃO TUI E LOGS ===
+    log_init("debug.log");
+    log_event("Simulacao iniciada. Meta: %d veiculos", cfg.num_veiculos);
 
+    initscr();
+    cbreak();
+    noecho();
+    curs_set(0);
+    start_color();
+    init_pair(1, COLOR_WHITE, COLOR_BLACK);
+    init_pair(2, COLOR_CYAN, COLOR_BLACK);
+    init_pair(3, COLOR_RED, COLOR_BLACK);
+    init_pair(4, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(5, COLOR_GREEN, COLOR_BLACK);
+
+#ifndef _WIN32
+    // === CRIAÇÃO DA THREAD DE SINAIS (Apenas POSIX) ===
+    pthread_t thread_sinais_id;
+    if (pthread_create(&thread_sinais_id, NULL, thread_sinais, (void*)&sinais) != 0) {
+        fprintf(stderr, "Erro ao criar thread de sinais.\n");
+        return EXIT_FAILURE;
+    }
+#endif
 
     // Cria a thread gerenciadora de spawn
     pthread_t thread_spawn_id;
@@ -219,11 +262,24 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Mantém a main rodando até o usuário encerrar ou a simulação parar
-    // Para simplificar, a main pode esperar as threads terminarem (o que não acontece na execução contínua)
+    // Configura leitura não bloqueante e deixa a thread relógio cuidar do teclado
+    nodelay(stdscr, TRUE);
+
+    // Mantém a main apenas aguardando a simulação terminar
+    while (simulacao_esta_rodando()) {
+        usleep(100 * 1000); // Aguarda 100ms
+    }
+
+    // Aguarda o encerramento limpo das threads
     pthread_join(thread_relogio_id, NULL);
     pthread_join(thread_spawn_id, NULL);
+#ifndef _WIN32
+    pthread_join(thread_sinais_id, NULL);
+#endif
     destruir_mutexes_mapa();
+
+    endwin();
+    log_close();
 
     return EXIT_SUCCESS;
 }

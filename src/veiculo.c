@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include "veiculo.h"
 #include "globals.h"
+#include "logger.h"
 
 // Variáveis globais para controle de ciclo de vida dos veículos (mantidas da sua equipe)
 int veiculos_ativos = 0;
@@ -158,7 +159,10 @@ int tentar_spawn_veiculo(void) {
 
                 mapa_simulacao.grade[sx][sy].ocupada = 1;
                 mapa_simulacao.grade[sx][sy].veiculo_id = v->id;
+                mapa_simulacao.grade[sx][sy].direcao_veiculo = v->direcao_atual;
+                mapa_simulacao.grade[sx][sy].eh_ambulancia = (v->tipo == AMBULANCIA);
                 mapa_simulacao.grade[sx][sy].tipo_veiculo_ocupante = (v->tipo == AMBULANCIA) ? 1 : 0;
+                log_event("Veiculo %d (Tipo: %d) instanciado em [%d, %d]", v->id, v->tipo, sx, sy);
 
                 liberar_celula(sx, sy);
 
@@ -224,6 +228,7 @@ void* thread_veiculo(void* arg) {
             pthread_cond_signal(&cond_spawn);
             pthread_mutex_unlock(&mutex_veiculos);
 
+            log_event("Veiculo %d despawnou no ponto [%d, %d]", self->id, self->x, self->y);
             free(self);
             pthread_exit(NULL);
         }
@@ -246,6 +251,7 @@ void* thread_veiculo(void* arg) {
             pthread_cond_signal(&cond_spawn);
             pthread_mutex_unlock(&mutex_veiculos);
 
+            log_event("Veiculo %d despawnou de emergencia (preso) no ponto [%d, %d]", self->id, self->x, self->y);
             free(self);
             pthread_exit(NULL);
         }
@@ -293,13 +299,21 @@ void* thread_veiculo(void* arg) {
         else if (dir_escolhida == DIREITA) dest_y++;
 
         if (dentro_mapa(dest_x, dest_y)) {
+            // 1. O carro tenta passar pelo semáforo usando a regra segura da equipe
             if (!aguardar_sinal_verde(self->x, self->y, dest_x, dest_y, dir_escolhida)) {
                 continue;
             }
 
+            // 2. O carro tenta se mover de fato
             int movido = mover_veiculo_celula(self->x, self->y, dest_x, dest_y,
                                               self->id, dir_escolhida);
+            // 3. Se o movimento deu certo, atualizamos a interface!
             if (movido == 1) {
+                travar_celula(dest_x, dest_y);
+                mapa_simulacao.grade[dest_x][dest_y].direcao_veiculo = dir_escolhida;
+                mapa_simulacao.grade[dest_x][dest_y].eh_ambulancia = (self->tipo == AMBULANCIA);
+                liberar_celula(dest_x, dest_y);
+
                 self->x = dest_x;
                 self->y = dest_y;
                 self->direcao_atual = dir_escolhida;
@@ -310,6 +324,7 @@ void* thread_veiculo(void* arg) {
         }
     }
 
+    free(self);
     return NULL;
 }
 
@@ -326,15 +341,17 @@ void* thread_ambulancia(void* arg) {
         while (tick_atual == tick_esperado && simulacao_rodando) {
             pthread_cond_wait(&cond_relogio, &mutex_relogio);
         }
+        int rodando = simulacao_rodando;
         pthread_mutex_unlock(&mutex_relogio);
 
-        if (!simulacao_rodando) break;
+        if (!rodando) break;
 
         self->ticks_acumulados++;
         if (self->ticks_acumulados < (int)self->velocidade) continue;
         self->ticks_acumulados = 0;
 
         if (self->passos_restantes <= 0 && eh_ponto_despawn(self->x, self->y)) {
+            log_event("Ambulancia %d despawnou no ponto [%d, %d]", self->id, self->x, self->y);
             break;
         }
 
@@ -343,6 +360,7 @@ void* thread_ambulancia(void* arg) {
         liberar_celula(self->x, self->y);
 
         if (opcoes_direcao == NENHUMA) {
+            log_event("Ambulancia %d despawnou de emergencia (presa) no ponto [%d, %d]", self->id, self->x, self->y);
             break;
         }
 
@@ -382,7 +400,7 @@ void* thread_ambulancia(void* arg) {
         int novos_radar_y[4] = {-1, -1, -1, -1};
         int r_x = self->x;
         int r_y = self->y;
-        
+
         for (int i = 0; i < 4; i++) {
             // Correção: Primeiro processa a célula atual da varredura
             if (dentro_mapa(r_x, r_y) && eh_via(mapa_simulacao.grade[r_x][r_y].tipo)) {
@@ -430,6 +448,7 @@ void* thread_ambulancia(void* arg) {
                     pthread_mutex_lock(&mutex_veiculos);
                     overrides_ativos++;
                     pthread_mutex_unlock(&mutex_veiculos);
+                    log_event("Ambulancia %d ativou OVERRIDE no cruzamento [%d, %d]", self->id, novos_radar_x[i], novos_radar_y[i]);
                 }
             }
         }

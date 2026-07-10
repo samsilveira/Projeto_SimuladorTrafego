@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "globals.h"
+#include <ncurses.h>
 
 Mapa mapa_simulacao;
 pthread_mutex_t mutex_celulas[LINHAS][COLUNAS];
@@ -111,7 +112,7 @@ int mover_veiculo_celula(int origem_i, int origem_j, int destino_i, int destino_
         (origem->tipo == CRUZAMENTO ||
          destino->tipo != CRUZAMENTO ||
          sinal_permite_movimento(destino, direcao_movimento))) {
-        
+
         destino->ocupada = 1;
         destino->veiculo_id = veiculo_id;
         destino->tipo_veiculo_ocupante = origem->tipo_veiculo_ocupante;
@@ -119,7 +120,7 @@ int mover_veiculo_celula(int origem_i, int origem_j, int destino_i, int destino_
         origem->ocupada = 0;
         origem->veiculo_id = 0;
         origem->tipo_veiculo_ocupante = 0;
-        
+
         movido = 1;
     }
 
@@ -209,33 +210,7 @@ static void remover_direcoes_invalidas(void) {
     }
 }
 
-static char simbolo_rua(Direcao direcao) {
-    int mascara = direcao;
 
-    if (mascara == CIMA) {
-        return '^';
-    }
-    if (mascara == BAIXO) {
-        return 'v';
-    }
-    if (mascara == DIREITA) {
-        return '>';
-    }
-    if (mascara == ESQUERDA) {
-        return '<';
-    }
-    if (mascara == (CIMA | BAIXO)) {
-        return '|';
-    }
-    if (mascara == (ESQUERDA | DIREITA)) {
-        return '-';
-    }
-    if (mascara == NENHUMA) {
-        return '#';
-    }
-
-    return '+';
-}
 
 void inicializar_mapa(void) {
     inicializar_mutexes_mapa();
@@ -276,54 +251,73 @@ void inicializar_mapa(void) {
     remover_direcoes_invalidas();
 }
 
-void imprimir_mapa(void) {
+#define COR_RUA 1
+#define COR_CARRO 2
+#define COR_AMB 3
+#define COR_CRUZ 4
+#define COR_VERDE 5
+
+static char char_direcao(Direcao dir) {
+    if (dir == CIMA) return '^';
+    if (dir == BAIXO) return 'v';
+    if (dir == ESQUERDA) return '<';
+    if (dir == DIREITA) return '>';
+    return 'O';
+}
+
+void imprimir_mapa(int tick, int ativos, int meta, int overrides) {
+    clear();
+
+    mvprintw(0, 0, "=== SIMULADOR DE TRAFEGO URBANO ===");
+    mvprintw(1, 0, "Tick: %d | Veiculos Ativos: %d / %d", tick, ativos, meta);
+    if (overrides > 0) {
+        attron(COLOR_PAIR(COR_AMB) | A_BOLD);
+        mvprintw(1, 45, "!!! EMERGENCIA ATIVA: Sinais Liberados !!!");
+        attroff(COLOR_PAIR(COR_AMB) | A_BOLD);
+    }
+    mvprintw(2, 0, "Legenda: [.] Rua  [|/-] Semaforo  [^v<>] Carros  [A] Ambulancia");
+
     for (int i = 0; i < LINHAS; i++) {
         for (int j = 0; j < COLUNAS; j++) {
             travar_celula(i, j);
             int ocupada = mapa_simulacao.grade[i][j].ocupada;
-            int veiculo_id = mapa_simulacao.grade[i][j].veiculo_id;
             TipoCelula tipo = mapa_simulacao.grade[i][j].tipo;
-            Direcao direcao = mapa_simulacao.grade[i][j].direcao;
+
+            Direcao dir_v = mapa_simulacao.grade[i][j].direcao_veiculo;
+            int amb = mapa_simulacao.grade[i][j].eh_ambulancia;
             int tipo_ocupante = mapa_simulacao.grade[i][j].tipo_veiculo_ocupante;
-            int em_override = mapa_simulacao.grade[i][j].override_emergencia;
-            
-            // lê cores atuais do semáforo para colorir
-            Cores sinal_h = mapa_simulacao.grade[i][j].sinal_horizontal;
             Cores sinal_v = mapa_simulacao.grade[i][j].sinal_vertical;
             liberar_celula(i, j);
-            
+
+            int py = i + 4;
+            int px = j * 3;
+
             if (ocupada) {
-                if (tipo_ocupante == 1) { // 1 = AMBULANCIA
-                    printf("\033[31m A \033[0m");
+                if (amb || tipo_ocupante == 1) {
+                    attron(COLOR_PAIR(COR_AMB) | A_BOLD);
+                    mvprintw(py, px, "[A]");
+                    attroff(COLOR_PAIR(COR_AMB) | A_BOLD);
                 } else {
-                    printf("%2d ", veiculo_id);
+                    attron(COLOR_PAIR(COR_CARRO) | A_BOLD);
+                    mvprintw(py, px, " %c ", char_direcao(dir_v));
+                    attroff(COLOR_PAIR(COR_CARRO) | A_BOLD);
                 }
             } else {
-                char c;
-                switch (tipo) {
-                    case CALCADA: c = '.'; break;
-                    case RUA: c = simbolo_rua(direcao); break;
-                    case CRUZAMENTO: c = em_override ? 'E' : 'X'; break;
-                    default: c = '?'; break;
-                }
-                
-                if (em_override && tipo == CRUZAMENTO) {
-                    printf("\033[31m %c \033[0m", c);
+                if (tipo == RUA) {
+                    attron(COLOR_PAIR(COR_RUA) | A_DIM);
+                    mvprintw(py, px, " . ");
+                    attroff(COLOR_PAIR(COR_RUA) | A_DIM);
                 } else if (tipo == CRUZAMENTO) {
-                    if (sinal_h == VERDE) {
-                        printf(" \033[32m-\033[0m ");
-                    } else if (sinal_v == VERDE) {
-                        printf(" \033[32m|\033[0m ");
+                    attron(COLOR_PAIR(COR_VERDE) | A_BOLD);
+                    if (sinal_v == VERDE) {
+                        mvprintw(py, px, " | ");
                     } else {
-                        printf(" \033[31mX\033[0m ");
+                        mvprintw(py, px, " - ");
                     }
-                } else if (tipo == CALCADA) {
-                    printf("\033[48;5;235m   \033[0m");
-                } else {
-                    printf(" %c ", c);
+                    attroff(COLOR_PAIR(COR_VERDE) | A_BOLD);
                 }
             }
         }
-        printf("\n");
     }
+    refresh();
 }

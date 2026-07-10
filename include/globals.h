@@ -29,6 +29,10 @@ typedef struct Celula {
     int ocupada;     // 0 para livre, 1 para ocupada
     int veiculo_id;  // ID do veiculo ocupante, ou 0 se livre
 
+    Direcao direcao_veiculo; 
+    int eh_ambulancia;
+    pthread_mutex_t mutex; // Mutex para exclusão mútua na célula
+
     // características do semáforo
     Cores sinal_horizontal; // sinal esquerda ou direita
     Cores sinal_vertical; // sinal cima ou baixo
@@ -60,13 +64,14 @@ extern pthread_cond_t cond_spawn;
 extern int simulacao_rodando;
 
 void inicializar_mapa(void);
+
 void inicializar_mutexes_mapa(void);
 void destruir_mutexes_mapa(void);
 int travar_celula(int i, int j);
 int liberar_celula(int i, int j);
 int mover_veiculo_celula(int origem_i, int origem_j, int destino_i, int destino_j,
                          int veiculo_id, Direcao direcao_movimento);
-void imprimir_mapa(void);
+void imprimir_mapa(int tick, int ativos, int meta, int overrides);
 int simulacao_esta_rodando(void);
 
 #endif
