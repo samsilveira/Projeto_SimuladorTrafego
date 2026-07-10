@@ -112,7 +112,7 @@ int mover_veiculo_celula(int origem_i, int origem_j, int destino_i, int destino_
         (origem->tipo == CRUZAMENTO ||
          destino->tipo != CRUZAMENTO ||
          sinal_permite_movimento(destino, direcao_movimento))) {
-        
+
         destino->ocupada = 1;
         destino->veiculo_id = veiculo_id;
         destino->tipo_veiculo_ocupante = origem->tipo_veiculo_ocupante;
@@ -120,7 +120,7 @@ int mover_veiculo_celula(int origem_i, int origem_j, int destino_i, int destino_
         origem->ocupada = 0;
         origem->veiculo_id = 0;
         origem->tipo_veiculo_ocupante = 0;
-        
+
         movido = 1;
     }
 
@@ -255,6 +255,7 @@ void inicializar_mapa(void) {
 #define COR_CARRO 2
 #define COR_AMB 3
 #define COR_CRUZ 4
+#define COR_VERDE 5
 
 static char char_direcao(Direcao dir) {
     if (dir == CIMA) return '^';
@@ -265,16 +266,16 @@ static char char_direcao(Direcao dir) {
 }
 
 void imprimir_mapa(int tick, int ativos, int meta, int overrides) {
-    clear(); 
-    
+    clear();
+
     mvprintw(0, 0, "=== SIMULADOR DE TRAFEGO URBANO ===");
     mvprintw(1, 0, "Tick: %d | Veiculos Ativos: %d / %d", tick, ativos, meta);
     if (overrides > 0) {
-        attron(COLOR_PAIR(COR_AMB));
+        attron(COLOR_PAIR(COR_AMB) | A_BOLD);
         mvprintw(1, 45, "!!! EMERGENCIA ATIVA: Sinais Liberados !!!");
-        attroff(COLOR_PAIR(COR_AMB));
+        attroff(COLOR_PAIR(COR_AMB) | A_BOLD);
     }
-    mvprintw(2, 0, "Legenda: [=] Rua  [+] Cruzamento  [^v<>] Carros  [A] Ambulancia");
+    mvprintw(2, 0, "Legenda: [.] Rua  [|/-] Semaforo  [^v<>] Carros  [A] Ambulancia");
 
     for (int i = 0; i < LINHAS; i++) {
         for (int j = 0; j < COLUNAS; j++) {
@@ -285,28 +286,35 @@ void imprimir_mapa(int tick, int ativos, int meta, int overrides) {
             Direcao dir_v = mapa_simulacao.grade[i][j].direcao_veiculo;
             int amb = mapa_simulacao.grade[i][j].eh_ambulancia;
             int tipo_ocupante = mapa_simulacao.grade[i][j].tipo_veiculo_ocupante;
+            Cores sinal_v = mapa_simulacao.grade[i][j].sinal_vertical;
             liberar_celula(i, j);
-            int py = i + 4; 
-            int px = j * 3; 
+
+            int py = i + 4;
+            int px = j * 3;
+
             if (ocupada) {
                 if (amb || tipo_ocupante == 1) {
-                    attron(COLOR_PAIR(COR_AMB));
-                    mvprintw(py, px, " A ");
-                    attroff(COLOR_PAIR(COR_AMB));
+                    attron(COLOR_PAIR(COR_AMB) | A_BOLD);
+                    mvprintw(py, px, "[A]");
+                    attroff(COLOR_PAIR(COR_AMB) | A_BOLD);
                 } else {
-                    attron(COLOR_PAIR(COR_CARRO));
+                    attron(COLOR_PAIR(COR_CARRO) | A_BOLD);
                     mvprintw(py, px, " %c ", char_direcao(dir_v));
-                    attroff(COLOR_PAIR(COR_CARRO));
+                    attroff(COLOR_PAIR(COR_CARRO) | A_BOLD);
                 }
             } else {
                 if (tipo == RUA) {
-                    attron(COLOR_PAIR(COR_RUA));
-                    mvprintw(py, px, " = ");
-                    attroff(COLOR_PAIR(COR_RUA));
+                    attron(COLOR_PAIR(COR_RUA) | A_DIM);
+                    mvprintw(py, px, " . ");
+                    attroff(COLOR_PAIR(COR_RUA) | A_DIM);
                 } else if (tipo == CRUZAMENTO) {
-                    attron(COLOR_PAIR(COR_CRUZ));
-                    mvprintw(py, px, " + ");
-                    attroff(COLOR_PAIR(COR_CRUZ));
+                    attron(COLOR_PAIR(COR_VERDE) | A_BOLD);
+                    if (sinal_v == VERDE) {
+                        mvprintw(py, px, " | ");
+                    } else {
+                        mvprintw(py, px, " - ");
+                    }
+                    attroff(COLOR_PAIR(COR_VERDE) | A_BOLD);
                 }
             }
         }
