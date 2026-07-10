@@ -67,3 +67,13 @@ Diferentemente do Helgrind, a ferramenta DRD (*Data Race Detector*) filtra grand
 
 ## 7. Conclusão
 A construção deste simulador confirmou as boas práticas de concorrência com APIs POSIX, suprindo com folga as regras demandadas. As decisões arquiteturais do uso de *Locks Finos* com proteção por ordenação de recursos atestaram a viabilidade de sistemas altamente paralelos em malhas compartilhadas. Os cruzamentos mantiveram-se imunes a impasses de lógica graças às travas sistemáticas combinadas à hibernação de fluxo (`pthread_cond_wait`), eliminando qualquer subutilização da simulação.
+
+## 8. Contribuições da Equipe
+
+* **Samuel Silveira:** Configuração do sistema de *build* (Makefile), implementação da ambulância e sua lógica avançada de priorização (*Radar Look-ahead*), criação da estratégia de prevenção de *deadlocks* em cruzamentos (*Resource Ordering*) e correção de *data races* (identificadas pelo DRD) no fluxo da ncurses e em variáveis globais.
+* **Elder Rayan Oliveira Silva:** Criação da estrutura base da malha viária e configuração das vias de mão única, desenvolvimento inicial das threads dos veículos (`thread_veiculo`), aprimoramento visual e redação da base deste relatório de decisões arquiteturais.
+* **Sebastião Sousa Soares:** Implementação da lógica de semáforos e sincronização nos cruzamentos, melhorias no feedback visual e refatoração da proteção de acesso em variáveis globais.
+* **Ramom Ricarto:** Idealização e implementação do sistema de relógio global discreto e da lógica de espera síncrona (utilizando variáveis de condição).
+* **Junio Silva:** Reorganização e refatoração de *structs* e *enums* centrais no código, contribuições no controle e movimentação de veículos usando mutexes para prevenção de *deadlock*.
+* **Sabrina Alencar Soares:** Construção da interface gráfica fluida em modo texto (TUI via `ncurses`), desenvolvimento do módulo de registros (*logs*) *thread-safe* e integração do visualizador da ambulância.
+* **Pedro Yan:** Análise e apoio na idealização técnica dos *Locks Finos* (mutex por célula) para viabilização de concorrência sem risco de travamentos mutuos.
