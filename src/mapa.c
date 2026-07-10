@@ -286,7 +286,12 @@ void imprimir_mapa(void) {
             Direcao direcao = mapa_simulacao.grade[i][j].direcao;
             int tipo_ocupante = mapa_simulacao.grade[i][j].tipo_veiculo_ocupante;
             int em_override = mapa_simulacao.grade[i][j].override_emergencia;
+            
+            // lê cores atuais do semáforo para colorir
+            Cores sinal_h = mapa_simulacao.grade[i][j].sinal_horizontal;
+            Cores sinal_v = mapa_simulacao.grade[i][j].sinal_vertical;
             liberar_celula(i, j);
+            
             if (ocupada) {
                 if (tipo_ocupante == 1) { // 1 = AMBULANCIA
                     printf("\033[31m A \033[0m");
@@ -304,6 +309,16 @@ void imprimir_mapa(void) {
                 
                 if (em_override && tipo == CRUZAMENTO) {
                     printf("\033[31m %c \033[0m", c);
+                } else if (tipo == CRUZAMENTO) {
+                    if (sinal_h == VERDE) {
+                        printf(" \033[32m-\033[0m ");
+                    } else if (sinal_v == VERDE) {
+                        printf(" \033[32m|\033[0m ");
+                    } else {
+                        printf(" \033[31mX\033[0m ");
+                    }
+                } else if (tipo == CALCADA) {
+                    printf("\033[48;5;235m   \033[0m");
                 } else {
                     printf(" %c ", c);
                 }
